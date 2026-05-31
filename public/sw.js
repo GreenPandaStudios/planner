@@ -3,7 +3,8 @@ const STATIC_ASSETS = [
   './',
   './index.html',
   './favicon.svg',
-  './icons.svg'
+  './icons.svg',
+  './manifest.json'
 ];
 
 // Install Event: cache static shell assets

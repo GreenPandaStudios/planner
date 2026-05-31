@@ -1,0 +1,18 @@
+{
+  "name": "FocusBoundary Planner",
+  "short_name": "FocusBoundary",
+  "description": "A serene point-based weekly capacity planner to protect your focus and prevent burnout.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#faf8f5",
+  "theme_color": "#faf8f5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
