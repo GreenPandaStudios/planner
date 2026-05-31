@@ -329,6 +329,21 @@ export default function App() {
     }
   }, [settings.githubPat, settings.gistId]);
 
+  // --- Online Auto-Sync ---
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('Network returned online. Re-syncing database...');
+      if (settings.githubPat) {
+        triggerGistSyncPull();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [settings.githubPat, settings.gistId]);
+
   const saveTasksState = (newTasks: Task[], shouldSyncPush = true) => {
     setTasks(newTasks);
     localStorage.setItem('antigravity_planner_tasks', JSON.stringify(newTasks));

@@ -1,26 +1,21 @@
-const CACHE_NAME = 'focus-boundary-cache-v1';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/src/main.tsx',
-  '/src/App.tsx',
-  '/src/App.css',
-  '/src/index.css',
-  '/src/types/index.ts',
-  '/src/agent/agent-engine.ts',
-  '/src/utils/github-sync.ts'
+const CACHE_NAME = 'focus-boundary-cache-v2';
+const STATIC_ASSETS = [
+  './',
+  './index.html',
+  './favicon.svg',
+  './icons.svg'
 ];
 
-// Install Event
+// Install Event: cache static shell assets
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
+      return cache.addAll(STATIC_ASSETS);
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate Event
+// Activate Event: clear old caches and claim clients
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => {
@@ -31,38 +26,50 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch Event (Cache falling back to network)
+// Fetch Event
 self.addEventListener('fetch', event => {
-  // Only cache GET requests
+  // Only intercept GET requests
   if (event.request.method !== 'GET') return;
-  
-  // Ignore chrome-extension or external API requests
-  if (!event.request.url.startsWith(self.location.origin)) return;
+
+  const url = new URL(event.request.url);
+
+  // Ignore browser extensions, hot-reloading (Vite Dev), or external third-party requests (like OpenAI API)
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/@vite/') || url.pathname.includes('/node_modules/')) return;
 
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
+      // 1. If cache hit, return cached version and update cache in the background (Stale-While-Revalidate)
       if (cachedResponse) {
-        // Fetch in background to update cache
         fetch(event.request).then(networkResponse => {
-          if (networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResponse));
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, networkResponse);
+            });
           }
-        }).catch(() => {/* Ignore network failures in background fetch */});
-        
+        }).catch(() => {/* Ignore network errors during silent background sync */});
         return cachedResponse;
       }
-      
+
+      // 2. Cache miss: fetch from network
       return fetch(event.request).then(networkResponse => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
         }
-        
+
+        // Cache the fresh resource dynamically
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then(cache => {
           cache.put(event.request, responseToCache);
         });
-        
+
         return networkResponse;
+      }).catch(err => {
+        // 3. Offline SPA fallback: serve index.html if navigating
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+        throw err;
       });
     })
   );
