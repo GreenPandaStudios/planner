@@ -225,6 +225,8 @@ export default function App() {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     const saved = localStorage.getItem('antigravity_planner_show_onboarding');
     return saved !== null ? JSON.parse(saved) : true;
@@ -288,6 +290,29 @@ export default function App() {
       try { setPeople(JSON.parse(savedPeople)); } catch (e) { console.error('Error loading people', e); }
     }
   }, []);
+
+  // --- PWA Install Prompt ---
+  useEffect(() => {
+    // Don't show if already installed (running in standalone)
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBanner(false);
+      setInstallPrompt(null);
+    }
+  };
 
   // --- Dialog controls ---
   useEffect(() => {
@@ -1143,6 +1168,61 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           )}
         </div>
       </header>
+
+      {/* PWA Install Banner */}
+      {showInstallBanner && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+          background: '#fdfcf7',
+          borderTop: '2px solid var(--border-color)',
+          padding: '1rem 1.2rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.8rem',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
+        }}>
+          <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>🧠</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Add to Home Screen</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Install FocusBoundary for offline access</div>
+          </div>
+          <button
+            onClick={handleInstall}
+            style={{
+              background: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.6rem 1rem',
+              fontFamily: 'var(--font-sans)',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              minHeight: '44px',
+            }}
+          >Install</button>
+          <button
+            onClick={() => setShowInstallBanner(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '0.4rem',
+              fontSize: '1.1rem',
+              lineHeight: 1,
+              minWidth: '32px',
+              minHeight: '44px',
+            }}
+            aria-label="Dismiss"
+          >✕</button>
+        </div>
+      )}
 
       {/* Onboarding Banner */}
       {showOnboarding && (
