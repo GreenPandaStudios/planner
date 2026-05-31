@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, 
   Settings as SettingsIcon, 
@@ -23,6 +23,7 @@ import {
 } from './utils/github-sync';
 import { runAgentStep } from './agent/agent-engine';
 import type { AgentMessage, AgentContext } from './agent/agent-engine';
+import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion } from './agent/triage-engine';
 import './App.css';
 
 // --- Week Helper Utilities ---
@@ -263,6 +264,18 @@ export default function App() {
   const [deletedTaskBackup, setDeletedTaskBackup] = useState<Task | null>(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
 
+  // --- Toast system ---
+  const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
+  const addToast = useCallback((text: string) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, text }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  }, []);
+
+  // --- Today's focus suggestion ---
+  const [todaySuggestion, setTodaySuggestion] = useState<string | null>(null);
+  const [isTriaging, setIsTriaging] = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Native dialog refs
@@ -273,22 +286,32 @@ export default function App() {
 
   // --- Initialization ---
   useEffect(() => {
-    setCurrentWeek(getIsoWeek(new Date()));
+    const week = getIsoWeek(new Date());
+    setCurrentWeek(week);
 
     const savedSettings = localStorage.getItem('antigravity_planner_settings');
+    let loadedSettings: AppSettings = DEFAULT_SETTINGS;
     if (savedSettings) {
-      try { setSettings(JSON.parse(savedSettings)); } catch (e) { console.error('Error loading settings', e); }
+      try { loadedSettings = JSON.parse(savedSettings); setSettings(loadedSettings); } catch (e) { console.error('Error loading settings', e); }
     }
 
+    let loadedTasks: Task[] = [];
     const savedTasks = localStorage.getItem('antigravity_planner_tasks');
     if (savedTasks) {
-      try { setTasks(JSON.parse(savedTasks)); } catch (e) { console.error('Error loading tasks', e); }
+      try { loadedTasks = JSON.parse(savedTasks); setTasks(loadedTasks); } catch (e) { console.error('Error loading tasks', e); }
     }
 
     const savedPeople = localStorage.getItem('antigravity_planner_people');
     if (savedPeople) {
       try { setPeople(JSON.parse(savedPeople)); } catch (e) { console.error('Error loading people', e); }
     }
+
+    // Compute today suggestion silently on load
+    const todayIdx = new Date().getDay();
+    const todayWeekday = WEEKDAYS[Math.min(Math.max(todayIdx - 1, 0), 4)];
+    getTodaySuggestion(loadedTasks, week, todayWeekday, loadedSettings.openaiApiKey)
+      .then(suggestion => setTodaySuggestion(suggestion))
+      .catch(() => {});
   }, []);
 
   // --- PWA Install Prompt ---
@@ -377,13 +400,6 @@ export default function App() {
     }
   };
 
-  const savePeopleState = (newPeople: Person[], shouldSyncPush = true) => {
-    setPeople(newPeople);
-    localStorage.setItem('antigravity_planner_people', JSON.stringify(newPeople));
-    if (shouldSyncPush && settings.githubPat && settings.gistId) {
-      triggerGistSyncPush(tasks, newPeople);
-    }
-  };
 
   const triggerGistSyncPull = async () => {
     if (!settings.githubPat) return;
@@ -477,106 +493,83 @@ export default function App() {
     }
   };
 
-  const handleQuickAdd = (e: React.FormEvent) => {
+  const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickTaskTitle.trim()) return;
+    const raw = quickTaskTitle.trim();
+    if (!raw) return;
 
-    // Parse the input locally using our heuristic parser
-    const parsedMeta = parseTaskMetadataLocally(quickTaskTitle);
-    
-    // Check if weekday was parsed from title (e.g., matching "Monday", "Tuesday", etc.)
-    const titleLower = quickTaskTitle.toLowerCase();
-    let assignedDay: Weekday = 'Monday'; // Default
-    for (const d of WEEKDAYS) {
-      if (titleLower.includes(d.toLowerCase())) {
-        assignedDay = d;
-        break;
-      }
-    }
-    
-    // Check if points were parsed from title (e.g. "3 pts", "5pt", "points 8", or trailing numbers)
-    let assignedPoints: 1 | 2 | 3 | 5 | 8 = 1; // Default
-    const pointsMatch = quickTaskTitle.match(/\b(1|2|3|5|8)\s*(?:pts?|points?|pt)?\b/i);
-    if (pointsMatch && pointsMatch[1]) {
-      assignedPoints = parseInt(pointsMatch[1]) as 1 | 2 | 3 | 5 | 8;
-    }
+    setQuickTaskTitle('');
+    setIsTriaging(true);
 
-    // Check if requester was parsed
-    const requesterMatch = quickTaskTitle.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
-    const assignedRequester = requesterMatch && requesterMatch[1] ? requesterMatch[1] : undefined;
+    // Try AI triage first, fall back to local heuristics
+    let triage = await triageWithAI(raw, currentWeek, settings, tasks);
+    if (!triage) triage = triageLocally(raw, currentWeek) as any;
 
-    // Remove parsed metadata noise from the title to keep it clean!
-    let cleanedTitle = quickTaskTitle;
-    
-    // Remove the weekday name from title
-    for (const d of WEEKDAYS) {
-      const reg = new RegExp(`\\b${d}\\b`, 'i');
-      cleanedTitle = cleanedTitle.replace(reg, '');
-    }
-    // Remove the points pattern (e.g., "3 pts", "3pts", "3 pt")
-    cleanedTitle = cleanedTitle.replace(/\b(?:1|2|3|5|8)\s*(?:pts?|points?|pt)?\b/i, '');
-    
-    // Remove "for/to/with Name" patterns
-    cleanedTitle = cleanedTitle.replace(/(?:for|to|with|asks?)\s+[A-Z][a-zA-Z]*/g, '');
-    
-    // Clean up whitespace
-    cleanedTitle = cleanedTitle.trim().replace(/\s+/g, ' ');
-    if (!cleanedTitle) {
-      cleanedTitle = quickTaskTitle; // Fallback if we stripped everything
-    }
+    const parsedMeta = parseTaskMetadataLocally(triage!.title);
 
-    // Capitalize first letter of cleaned title
-    cleanedTitle = cleanedTitle.charAt(0).toUpperCase() + cleanedTitle.slice(1);
+    // Parse requester from raw title
+    const requesterMatch = raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
+    const assignedRequester = requesterMatch?.[1];
 
-    const newQuickTask: Task = {
+    const newTask: Task = {
       id: Math.random().toString(36).substring(2, 9),
-      title: cleanedTitle,
-      points: assignedPoints,
-      week: currentWeek,
-      day: assignedDay,
+      title: triage!.title,
+      points: triage!.points,
+      week: (triage as any).week,
+      day: triage!.day,
       status: 'todo',
       createdAt: Date.now(),
       requestedBy: assignedRequester,
-      metadata: parsedMeta
+      metadata: parsedMeta,
     };
 
-    // Check if requester exists in registry, if not, add them
     let nextPeople = people;
     if (assignedRequester) {
-      const personExists = people.some(p => p.name.toLowerCase() === assignedRequester.toLowerCase());
-      if (!personExists) {
-        const newPerson: Person = {
-          id: Math.random().toString(36).substring(2, 9),
-          name: assignedRequester,
-          createdAt: Date.now()
-        };
-        nextPeople = [...people, newPerson];
+      const exists = people.some(p => p.name.toLowerCase() === assignedRequester.toLowerCase());
+      if (!exists) {
+        const np: Person = { id: Math.random().toString(36).substring(2, 9), name: assignedRequester, createdAt: Date.now() };
+        nextPeople = [...people, np];
         setPeople(nextPeople);
         localStorage.setItem('antigravity_planner_people', JSON.stringify(nextPeople));
       }
     }
 
-    // Save directly (we allow overloading, visual warning tells user to triage with AI)
-    const updatedTasks = [...tasks, newQuickTask];
+    let updatedTasks = [...tasks, newTask];
+
+    // Silent overflow rebalance
+    const weekPoints = updatedTasks
+      .filter(t => t.week === (triage as any).week && t.status !== 'done')
+      .reduce((s, t) => s + t.points, 0);
+
+    if (weekPoints > settings.weeklyPointsLimit) {
+      const moves = await silentRebalance(updatedTasks, (triage as any).week, settings.weeklyPointsLimit, settings.openaiApiKey);
+      for (const mv of moves) {
+        updatedTasks = updatedTasks.map(t =>
+          t.id === mv.taskId ? { ...t, week: mv.toWeek, day: mv.toDay } : t
+        );
+        addToast(`Moved "${mv.label}" → next week`);
+      }
+    }
+
     setTasks(updatedTasks);
     localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
-    setQuickTaskTitle('');
+    setIsTriaging(false);
 
+    const weekLabel = triage!.weekOffset === 0 ? 'this week' : triage!.weekOffset === 1 ? 'next week' : `in ${triage!.weekOffset} weeks`;
+    addToast(`✓ Added "${newTask.title}" → ${newTask.day}, ${weekLabel} (${newTask.points}pt)`);
+
+    // Background AI enrichment
     if (settings.openaiApiKey) {
-      enrichTaskWithAI(newQuickTask, settings.openaiApiKey).then(enrichedMeta => {
+      enrichTaskWithAI(newTask, settings.openaiApiKey).then(enrichedMeta => {
         setTasks(current => {
-          const next = current.map(t => t.id === newQuickTask.id ? { ...t, metadata: enrichedMeta } : t);
+          const next = current.map(t => t.id === newTask.id ? { ...t, metadata: enrichedMeta } : t);
           localStorage.setItem('antigravity_planner_tasks', JSON.stringify(next));
-          if (settings.githubPat && settings.gistId) {
-            triggerGistSyncPush(next, nextPeople);
-          }
+          if (settings.githubPat && settings.gistId) triggerGistSyncPush(next, nextPeople);
           return next;
         });
       });
     } else {
-      if (settings.githubPat && settings.gistId) {
-        triggerGistSyncPush(updatedTasks, nextPeople);
-      }
+      if (settings.githubPat && settings.gistId) triggerGistSyncPush(updatedTasks, nextPeople);
     }
   };
 
@@ -646,66 +639,54 @@ export default function App() {
       }
     }
 
+    // Save people first if new
+    if (nextPeople !== people) {
+      setPeople(nextPeople);
+      localStorage.setItem('antigravity_planner_people', JSON.stringify(nextPeople));
+    }
+
+    let updatedTasks: Task[];
+    if (editingTask) {
+      updatedTasks = tasks.map(t => t.id === proposedTask.id ? proposedTask : t);
+    } else {
+      updatedTasks = [...tasks, proposedTask];
+    }
+
+    setIsTaskModalOpen(false);
+
+    // Silent overflow rebalance
     if (totalProposedPoints > settings.weeklyPointsLimit) {
-      if (!settings.openaiApiKey) {
-        alert(`Adding this task would push you to ${totalProposedPoints} points, exceeding your limit of ${settings.weeklyPointsLimit}.\n\nPlease set your OpenAI API key in Settings to use the Capacity Assistant.`);
-        return;
-      }
-      
-      // Auto-save the new person profile locally first so agent knows them
-      if (nextPeople !== people) {
-        savePeopleState(nextPeople, false);
-      }
+      silentRebalance(updatedTasks, proposedTask.week, settings.weeklyPointsLimit, settings.openaiApiKey)
+        .then(moves => {
+          let rebalanced = [...updatedTasks];
+          for (const mv of moves) {
+            rebalanced = rebalanced.map(t =>
+              t.id === mv.taskId ? { ...t, week: mv.toWeek, day: mv.toDay } : t
+            );
+            addToast(`Moved "${mv.label}" → next week`);
+          }
+          setTasks(rebalanced);
+          localStorage.setItem('antigravity_planner_tasks', JSON.stringify(rebalanced));
+          if (settings.githubPat && settings.gistId) triggerGistSyncPush(rebalanced, nextPeople);
+        });
+    }
 
-      setIsTaskModalOpen(false);
-      setPendingTaskAction({
-        type: editingTask ? 'edit' : 'add',
-        task: proposedTask,
-      });
-      initiateNegotiation(proposedTask, tasks, nextPeople);
+    setTasks(updatedTasks);
+    localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
 
-      // Async background AI enrichment to overwrite local heuristic for better negotiation quality
+    if (settings.openaiApiKey) {
       enrichTaskWithAI(proposedTask, settings.openaiApiKey).then(enrichedMeta => {
-        setPendingTaskAction(prev => {
-          if (!prev) return null;
-          return { ...prev, task: { ...prev.task, metadata: enrichedMeta } };
+        setTasks(currentTasks => {
+          const nextTasks = currentTasks.map(t =>
+            t.id === proposedTask.id ? { ...t, metadata: enrichedMeta } : t
+          );
+          localStorage.setItem('antigravity_planner_tasks', JSON.stringify(nextTasks));
+          if (settings.githubPat && settings.gistId) triggerGistSyncPush(nextTasks, nextPeople);
+          return nextTasks;
         });
       });
     } else {
-      // Save directly
-      if (nextPeople !== people) {
-        setPeople(nextPeople);
-        localStorage.setItem('antigravity_planner_people', JSON.stringify(nextPeople));
-      }
-      let updatedTasks: Task[];
-      if (editingTask) {
-        updatedTasks = tasks.map(t => t.id === proposedTask.id ? proposedTask : t);
-      } else {
-        updatedTasks = [...tasks, proposedTask];
-      }
-      // Pushes both tasks and people to Gist
-      setTasks(updatedTasks);
-      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
-      setIsTaskModalOpen(false);
-
-      if (settings.openaiApiKey) {
-        enrichTaskWithAI(proposedTask, settings.openaiApiKey).then(enrichedMeta => {
-          setTasks(currentTasks => {
-            const nextTasks = currentTasks.map(t => 
-              t.id === proposedTask.id ? { ...t, metadata: enrichedMeta } : t
-            );
-            localStorage.setItem('antigravity_planner_tasks', JSON.stringify(nextTasks));
-            if (settings.githubPat && settings.gistId) {
-              triggerGistSyncPush(nextTasks, nextPeople);
-            }
-            return nextTasks;
-          });
-        });
-      } else {
-        if (settings.githubPat && settings.gistId) {
-          triggerGistSyncPush(updatedTasks, nextPeople);
-        }
-      }
+      if (settings.githubPat && settings.gistId) triggerGistSyncPush(updatedTasks, nextPeople);
     }
   };
 
@@ -1263,8 +1244,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         </div>
       )}
 
-      {/* Tab Contents */}
-          {/* Quick Capture Input Form */}
+      {/* Quick Capture Input Form */}
           <form 
             onSubmit={handleQuickAdd} 
             className="glass animate-fade-in" 
@@ -1291,14 +1271,16 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 fontFamily: 'var(--font-sans)',
                 color: 'var(--text-primary)'
               }}
-              placeholder="✏️ Quick capture a task (e.g. Write report for Sarah 3 pts Monday)..."
+              placeholder={isTriaging ? '🧠 Triaging...' : '✏️ Add a task — AI will schedule it (e.g. "finish report this month")'}
               ref={quickCaptureInputRef}
               value={quickTaskTitle}
               onChange={e => setQuickTaskTitle(e.target.value)}
+              disabled={isTriaging}
             />
             <button 
               type="submit" 
               className="btn-primary" 
+              disabled={isTriaging}
               style={{ 
                 padding: '0.4rem 0.8rem', 
                 fontSize: '0.8rem', 
@@ -1306,10 +1288,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 margin: 0,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.2rem'
+                gap: '0.2rem',
+                opacity: isTriaging ? 0.6 : 1,
               }}
             >
-              <Plus size={14} /> Capture
+              <Plus size={14} /> Add
             </button>
           </form>
 
@@ -1369,12 +1352,35 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             {WEEKDAYS.map(day => {
               const dayTasks = tasks.filter(t => t.week === currentWeek && t.day === day);
               const dayPoints = getDayPoints(currentWeek, day);
+              const todayIdx = new Date().getDay();
+              const todayWeekday = WEEKDAYS[Math.min(Math.max(todayIdx - 1, 0), 4)];
+              const isToday = day === todayWeekday && currentWeek === getIsoWeek(new Date());
               return (
                 <section key={day} className="weekday-column glass">
                   <div className="column-header">
-                    <span className="column-title">{day}</span>
+                    <span className="column-title">{day}{isToday ? ' ·' : ''}</span>
                     <span className="column-points-badge">{dayPoints} pts</span>
                   </div>
+
+                  {/* Today's focus suggestion */}
+                  {isToday && todaySuggestion && (
+                    <div style={{
+                      background: 'rgba(29,78,216,0.06)',
+                      border: '1px solid rgba(29,78,216,0.15)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.45rem 0.6rem',
+                      fontSize: '0.82rem',
+                      color: 'var(--accent-primary)',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}>
+                      <span>🎯</span>
+                      <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginRight: '0.2rem' }}>Start with:</span>
+                      {todaySuggestion}
+                    </div>
+                  )}
 
                   <div className="task-list">
                     {dayTasks.map(task => (
@@ -1398,7 +1404,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                             className={`task-points-badge badge-${task.points}`}
                             onClick={(e) => handleCyclePoints(task, e)}
                             style={{ cursor: 'pointer' }}
-                            title="Click to cycle points size (1->2->3->5->8)"
+                            title="Tap to cycle size"
                           >
                             {task.points}
                           </span>
@@ -1409,9 +1415,8 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                           </p>
                         )}
 
-                        
-                        {/* Inline Weekday Picker */}
-                        <div style={{ display: 'flex', gap: '0.2rem', marginTop: '0.4rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.4rem', marginBottom: '0.2rem' }}>
+                        {/* Inline day picker */}
+                        <div className="task-day-picker">
                           {(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] as Weekday[]).map(wd => {
                             const isCurrent = task.day === wd;
                             const label = wd === 'Wednesday' ? 'W' : wd === 'Thursday' ? 'Th' : wd.charAt(0);
@@ -1419,19 +1424,8 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                               <button
                                 key={wd}
                                 type="button"
+                                className={`day-picker-btn${isCurrent ? ' active' : ''}`}
                                 onClick={(e) => handleMoveDay(task, wd, e)}
-                                style={{
-                                  padding: '0.1rem 0.25rem',
-                                  fontSize: '0.6rem',
-                                  fontFamily: 'var(--font-mono)',
-                                  borderRadius: '2px',
-                                  border: isCurrent ? '1px solid var(--accent-primary)' : '1px dashed var(--border-color)',
-                                  background: isCurrent ? 'rgba(29, 78, 216, 0.08)' : 'transparent',
-                                  color: isCurrent ? 'var(--accent-primary)' : 'var(--text-muted)',
-                                  cursor: 'pointer',
-                                  fontWeight: isCurrent ? 'bold' : 'normal',
-                                  lineHeight: 1
-                                }}
                                 title={`Move to ${wd}`}
                               >
                                 {label}
@@ -1442,21 +1436,19 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
                           {task.requestedBy ? (
-                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
-                              <User size={10} /> for {task.requestedBy}
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
+                              <User size={11} /> for {task.requestedBy}
                             </span>
                           ) : (
                             <span />
                           )}
-                          <div className="task-actions" style={{ margin: 0, border: 'none', paddingTop: 0 }}>
-                            <button 
-                              className="task-action-btn delete-btn" 
-                              onClick={() => handleDeleteTask(task.id)}
-                              title="Delete Task"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
+                          <button 
+                            className="task-action-btn delete-btn" 
+                            onClick={() => handleDeleteTask(task.id)}
+                            title="Delete Task"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1466,7 +1458,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     className="btn-add-task-inline" 
                     onClick={() => openAddTask(day)}
                   >
-                    <Plus size={13} /> Add Task
+                    <Plus size={14} /> Add
                   </button>
                 </section>
               );
@@ -1485,77 +1477,52 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             </button>
           </div>
 
-          <form onSubmit={handleSaveTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form onSubmit={handleSaveTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
             <div className="form-group">
-              <label htmlFor="task-title-input">Task Title</label>
+              <label htmlFor="task-title-input">Task</label>
               <input 
                 id="task-title-input"
                 type="text" 
                 className="form-control" 
                 value={taskTitle} 
                 onChange={e => handleTitleChange(e.target.value)} 
-                placeholder="What do you need to do? (Type 'for [Name]' to assign)"
+                placeholder="What needs doing?"
                 required
                 autoFocus
               />
             </div>
 
             <div className="form-group">
-              <label htmlFor="task-desc-input">Description (Optional)</label>
+              <label htmlFor="task-desc-input">Notes (optional)</label>
               <textarea 
                 id="task-desc-input"
                 className="form-control" 
                 value={taskDesc} 
                 onChange={e => setTaskDesc(e.target.value)} 
-                placeholder="Details or notes..."
+                placeholder="Details..."
                 rows={2}
               />
             </div>
 
-            <div className="points-helper-box">
-              <h4>Effort Sizing Guide</h4>
-              <p>Choose story points by required focus effort: <strong>1 pt</strong> = Quick admin task (&lt;30m); <strong>2 pts</strong> = Small task (1-2h); <strong>3 pts</strong> = Focus block (half-day); <strong>5 pts</strong> = Large project task (full day); <strong>8 pts</strong> = Complex epic (break down!).</p>
-            </div>
-
             <div className="form-grid-2">
               <div className="form-group">
-                <label htmlFor="task-points-select">Story Points (Capacity Size)</label>
+                <label htmlFor="task-points-select">Size</label>
                 <select 
                   id="task-points-select"
                   className="form-control"
                   value={taskPoints}
                   onChange={e => setTaskPoints(Number(e.target.value) as any)}
                 >
-                  <option value={1}>1 pt (XS — Quick Admin, &lt;30m)</option>
-                  <option value={2}>2 pts (S — Minor Task, 1-2h)</option>
-                  <option value={3}>3 pts (M — Focus Block, 2-4h)</option>
-                  <option value={5}>5 pts (L — Project Task, full day)</option>
-                  <option value={8}>8 pts (XL — Complex Epic, split needed)</option>
+                  <option value={1}>1 pt — Quick (&lt;30m)</option>
+                  <option value={2}>2 pts — Minor (1-2h)</option>
+                  <option value={3}>3 pts — Focus block</option>
+                  <option value={5}>5 pts — Full day</option>
+                  <option value={8}>8 pts — Epic (split!)</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label htmlFor="task-requested-by">For Person (Optional)</label>
-                <input 
-                  id="task-requested-by"
-                  type="text" 
-                  className="form-control" 
-                  value={taskRequestedBy} 
-                  onChange={e => setTaskRequestedBy(e.target.value)} 
-                  placeholder="e.g. Sarah, Alex"
-                  list="people-suggestions"
-                />
-                <datalist id="people-suggestions">
-                  {people.map(p => (
-                    <option key={p.id} value={p.name} />
-                  ))}
-                </datalist>
-              </div>
-            </div>
-
-            <div className="form-grid-2" style={{ gridTemplateColumns: '1fr' }}>
-              <div className="form-group">
-                <label htmlFor="task-day-select">Scheduled Day</label>
+                <label htmlFor="task-day-select">Day</label>
                 <select 
                   id="task-day-select"
                   className="form-control"
@@ -1569,12 +1536,30 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               </div>
             </div>
 
+            <div className="form-group">
+              <label htmlFor="task-requested-by">For (optional)</label>
+              <input 
+                id="task-requested-by"
+                type="text" 
+                className="form-control" 
+                value={taskRequestedBy} 
+                onChange={e => setTaskRequestedBy(e.target.value)} 
+                placeholder="Sarah, Alex…"
+                list="people-suggestions"
+              />
+              <datalist id="people-suggestions">
+                {people.map(p => (
+                  <option key={p.id} value={p.name} />
+                ))}
+              </datalist>
+            </div>
+
             <div className="form-actions">
               <button type="button" className="btn-secondary" onClick={() => setIsTaskModalOpen(false)}>
                 Cancel
               </button>
               <button type="submit" className="btn-primary">
-                Save Task
+                Save
               </button>
             </div>
           </form>
@@ -1828,13 +1813,13 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         )}
       </dialog>
 
-      {/* Undo Toast Banner */}
+      {/* Undo Toast */}
       {showUndoToast && deletedTaskBackup && (
         <div 
           className="glass-elevated animate-fade-in" 
           style={{ 
             position: 'fixed', 
-            bottom: '1.5rem', 
+            bottom: '5rem',
             left: '50%', 
             transform: 'translateX(-50%)', 
             background: '#fdfbdf', 
@@ -1845,32 +1830,63 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             display: 'flex', 
             alignItems: 'center', 
             gap: '1rem',
-            borderRadius: 'var(--radius-md)'
+            borderRadius: 'var(--radius-md)',
+            whiteSpace: 'nowrap',
           }}
         >
-          <span style={{ fontSize: '0.78rem', color: '#6d6528', fontWeight: 500 }}>
-            Task deleted: "<strong>{deletedTaskBackup.title}</strong>"
+          <span style={{ fontSize: '0.82rem', color: '#6d6528', fontWeight: 500 }}>
+            Deleted: "<strong>{deletedTaskBackup.title}</strong>"
           </span>
           <button 
             type="button"
             onClick={handleUndoDelete}
             className="btn-primary"
             style={{ 
-              padding: '0.25rem 0.6rem', 
-              fontSize: '0.7rem', 
+              padding: '0.3rem 0.7rem', 
+              fontSize: '0.8rem', 
               margin: 0, 
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--accent-primary)',
-              borderColor: 'var(--accent-primary)',
-              color: '#fff',
-              cursor: 'pointer',
-              lineHeight: 1
+              minHeight: '36px',
             }}
           >
             Undo
           </button>
         </div>
       )}
+
+      {/* AI Action Toast Stack */}
+      <div style={{
+        position: 'fixed',
+        bottom: '1.5rem',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9998,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.4rem',
+        alignItems: 'center',
+        pointerEvents: 'none',
+      }}>
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className="animate-fade-in"
+            style={{
+              background: '#fdfcf7',
+              border: '1px solid var(--border-color)',
+              borderBottom: '2px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              color: 'var(--text-primary)',
+              fontWeight: 500,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {toast.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
