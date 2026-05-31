@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusBoundary // Mobile HUD Mockup</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Phone Mockup Outer Frame -->
+  <div class="phone-viewport">
+    
+    <!-- Notch -->
+    <div class="phone-notch"></div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span class="status-time">09:41</span>
+      <span class="status-network">LTE 95%</span>
+    </div>
+
+    <!-- HUD Container -->
+    <div class="hud-container">
+      
+      <!-- Cockpit Header -->
+      <header class="hud-header">
+        <div class="hud-title-block">
+          <span class="hud-label">Weekly Schedule</span>
+          <span class="hud-value-primary">Week 22 // Load Active</span>
+        </div>
+        <div class="logic-core-badge">
+          Assistant: Online
+        </div>
+      </header>
+
+      <!-- System Meters -->
+      <section class="hud-meters">
+        <!-- Capacity Limit -->
+        <div class="hud-panel">
+          <span class="hud-panel-title">Weekly Load</span>
+          <span class="hud-meter-val warning">23 / 20</span>
+          <span class="hud-label">Story Points</span>
+          <div class="hud-bar">
+            <div class="hud-bar-fill warning" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Overload Ratio -->
+        <div class="hud-panel">
+          <span class="hud-panel-title">Fri Distribution</span>
+          <span class="hud-meter-val warning">43.4%</span>
+          <span class="hud-label">Thurs/Fri Share (&gt;40%)</span>
+          <div class="hud-bar">
+            <div class="hud-bar-fill warning" style="width: 100%;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Daily Timeline -->
+      <section class="hud-timeline">
+        
+        <!-- Monday -->
+        <div class="hud-day-row">
+          <div class="hud-day-header">
+            <span class="hud-day-name">Monday</span>
+            <span class="hud-day-pts">5 pts</span>
+          </div>
+          <div class="hud-task-card">
+            <span class="hud-task-title">✓ Review sprint priorities</span>
+            <span class="hud-task-points">1 pt</span>
+          </div>
+          <div class="hud-task-card">
+            <span class="hud-task-title">✓ Fix login page token leakage</span>
+            <span class="hud-task-points">3 pts</span>
+          </div>
+        </div>
+
+        <!-- Tuesday -->
+        <div class="hud-day-row">
+          <div class="hud-day-header">
+            <span class="hud-day-name">Tuesday</span>
+            <span class="hud-day-pts">8 pts</span>
+          </div>
+          <div class="hud-task-card">
+            <span class="hud-task-title">Write technical spec document</span>
+            <span class="hud-task-points" style="color: var(--accent-purple);">5 pts</span>
+          </div>
+          <div class="hud-task-card">
+            <span class="hud-task-title">Refactor storage engine</span>
+            <span class="hud-task-points" style="color: var(--accent-cyan);">3 pts</span>
+          </div>
+        </div>
+
+        <!-- Wednesday -->
+        <div class="hud-day-row overloaded">
+          <div class="hud-day-header">
+            <span class="hud-day-name">Wednesday</span>
+            <span class="hud-day-pts" style="color: var(--color-warning);">10 pts</span>
+          </div>
+          <div class="hud-task-card">
+            <span class="hud-task-title">Mockup phone UI layouts</span>
+            <span class="hud-task-points" style="color: var(--accent-purple);">5 pts</span>
+          </div>
+          <div class="hud-task-card" style="border-color: var(--color-danger);">
+            <span class="hud-task-title" style="color: var(--color-danger);">[Pending] Prepare pitch deck</span>
+            <span class="hud-task-points" style="color: var(--color-danger);">5 pts</span>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- Conversational Override Overlay (AI Negotiation Active) -->
+    <div class="hud-override-overlay">
+      <header class="override-header">
+        <span class="override-title">Capacity Assistant // GPT 5.4-NANO</span>
+        <div class="override-status-dot"></div>
+      </header>
+
+      <div class="override-scroller">
+        <!-- Message 1 -->
+        <div class="hud-chat-msg agent">
+          Adding **"Prepare pitch deck" (+5 points)** will push your active week to **23 points**, which exceeds your velocity limit of **20 points**.
+          <br><br>
+          I have paused the save to protect your schedule. Let's look at your tasks to see what we can reschedule, resize, or delete to make room.
+        </div>
+
+        <!-- Message 2 -->
+        <div class="hud-chat-msg agent">
+          Here are some suggested compromises to balance the budget:
+        </div>
+
+        <!-- Compromise Options -->
+        <div class="options-panel">
+          <button class="tactical-btn confirm-compromise">
+            <span>[Option 01] Postpone "Refactor storage" (3pts) to W23</span>
+            <span>→ Save deck</span>
+          </button>
+          <button class="tactical-btn">
+            <span>[Option 02] Resize "Mockup phone UI" to 2pts (XS scope)</span>
+            <span>→ Save deck</span>
+          </button>
+          <button class="tactical-btn">
+            <span>[Option 03] Abort "Prepare pitch deck" transaction</span>
+            <span>[Cancel]</span>
+          </button>
+        </div>
+
+        <!-- User msg -->
+        <div class="hud-chat-msg user">
+          Let's go with option 1, move storage refactor to next week.
+        </div>
+      </div>
+
+      <div class="override-footer">
+        <input type="text" class="override-input" placeholder="Execute command..." value="Select [Option 01]" readonly>
+        <button class="override-send">
+          <span style="color: #fff; font-weight: bold;">&gt;</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

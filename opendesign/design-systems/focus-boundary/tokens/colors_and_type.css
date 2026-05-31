@@ -1,0 +1,67 @@
+/* FocusBoundary Design Tokens - Warm Physical Paper Notebook Aesthetic */
+
+:root {
+  /* Brand Typography Fonts */
+  --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --fb-font-serif: 'Lora', Georgia, serif;
+  --fb-font-mono: 'JetBrains Mono', monospace;
+
+  /* Raw Colors - Physical Materials */
+  --fb-color-cream-paper: #faf8f5;     /* Warm journal paper background */
+  --fb-color-white-sheet: #fdfcf7;     /* Clean sheet page */
+  --fb-color-shaded-sheet: #f5f2eb;    /* Slightly shaded page edge */
+  --fb-color-graphite-dark: #1c1e21;   /* Main text, dark pencil lead */
+  --fb-color-pencil-gray: #4a4d50;     /* Subtext, slate graphite lead */
+  --fb-color-pencil-light: #7e8488;    /* Muted pencil notes */
+  --fb-color-graphite-line: #d1cbd4;   /* Notebook paper lined rule */
+  --fb-color-graphite-hover: #b4abb8;  /* Lighter rule hover */
+
+  /* Ink Accents */
+  --fb-color-ink-blue: #1d4ed8;        /* Blue fountain pen ink */
+  --fb-color-ink-blue-dark: #1e40af;   /* Shaded blue ink */
+  --fb-color-ink-teal: #0369a1;        /* Teal marker highlight */
+  --fb-color-ink-purple: #6d28d9;      /* Purple ink marker */
+  --fb-color-ink-green: #0f766e;       /* Forest green status ink */
+  --fb-color-ink-amber: #b45309;       /* Amber highlighter amber */
+  --fb-color-ink-red: #be123c;         /* Red correction pen ink */
+
+  /* Spacing Grid (Pencil lines distance) */
+  --fb-space-xs: 0.25rem;  /* 4px */
+  --fb-space-sm: 0.5rem;   /* 8px */
+  --fb-space-md: 1rem;     /* 16px */
+  --fb-space-lg: 1.5rem;   /* 24px */
+  --fb-space-xl: 2.25rem;  /* 36px */
+
+  /* Borders & Radius (Crisp paper cuts) */
+  --fb-radius-sm: 4px;
+  --fb-radius-md: 8px;
+  --fb-radius-lg: 12px;
+  --fb-border-width: 1px;
+
+  /* Shadows (Pencil drop shadow effects) */
+  --fb-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --fb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* Semantic Assignments mapped to UI elements */
+.fb-theme-warm-notebook {
+  --bg-base: var(--fb-color-cream-paper);
+  --bg-surface: var(--fb-color-white-sheet);
+  --bg-surface-elevated: var(--fb-color-shaded-sheet);
+  --border-color: var(--fb-color-graphite-line);
+  --border-hover: var(--fb-color-graphite-hover);
+  --text-primary: var(--fb-color-graphite-dark);
+  --text-secondary: var(--fb-color-pencil-gray);
+  --text-muted: var(--fb-color-pencil-light);
+  
+  --accent-primary: var(--fb-color-ink-blue);
+  --accent-primary-hover: var(--fb-color-ink-blue-dark);
+  --accent-cyan: var(--fb-color-ink-teal);
+  --accent-purple: var(--fb-color-ink-purple);
+  
+  --color-success: var(--fb-color-ink-green);
+  --color-warning: var(--fb-color-ink-amber);
+  --color-danger: var(--fb-color-ink-red);
+
+  font-family: var(--fb-font-sans);
+}
