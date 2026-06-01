@@ -178,44 +178,47 @@
 
 /* Onboarding Sticky Note (Post-it style) */
 .onboarding-banner {
-  padding: 1.2rem;
-  background: #fefec9; /* Classic yellow sticky note */
-  border: 1px solid #e7df95;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.05);
+  padding: 1rem 1.2rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   position: relative;
-  transform: rotate(-0.5deg); /* Slight angle for physical realism */
 }
 
 .onboarding-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-family: var(--font-serif);
-  font-weight: 700;
-  font-size: 1rem;
-  color: #78350f; /* Warm amber/brown text */
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
 }
 
 .onboarding-body {
-  font-size: 0.82rem;
-  color: #92400e;
-  line-height: 1.5;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 .btn-close-banner {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #b45309;
+  color: var(--text-muted);
   transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
 }
 
 .btn-close-banner:hover {
-  color: #78350f;
+  color: var(--text-primary);
 }
 
 /* Dashboard Section */
@@ -1750,5 +1753,151 @@ dialog::backdrop {
 @keyframes spin-loader {
   to { transform: rotate(360deg); }
 }
+
+/* --- Apple-style Segmented Control switcher --- */
+.segmented-control {
+  background: rgba(120, 120, 128, 0.06);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  display: flex;
+  gap: 2px;
+  margin-bottom: 1.2rem;
+  border: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.segment-item {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: calc(var(--radius-md) - 3px);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  color: var(--text-secondary);
+}
+
+.segment-item.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.segment-item:not(.active):hover {
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--text-primary);
+}
+
+/* --- Quick Capture Input Apple Refactoring --- */
+.quick-capture-form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(120, 120, 128, 0.08);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.2rem;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.quick-capture-form:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+
+.quick-capture-input {
+  flex-grow: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.2rem;
+  outline: none;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+.quick-capture-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.quick-capture-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.quick-capture-submit:hover {
+  background: var(--accent-primary-hover);
+}
+
+.quick-capture-submit:disabled {
+  background: rgba(120, 120, 128, 0.1);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* --- Clean Circular Checkboxes --- */
+.task-checkbox-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 19px;
+  height: 19px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 50%;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  background: var(--bg-surface);
+  position: relative;
+}
+
+.task-checkbox:checked {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.task-checkbox:checked::after {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.task-checkbox:not(:checked):hover {
+  border-color: var(--accent-primary);
+  background: rgba(0, 113, 227, 0.04);
+}
+
 
 

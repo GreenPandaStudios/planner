@@ -1,0 +1,37 @@
+{
+  "generated": "2026-06-01T23:18:43Z",
+  "sections": [
+    {
+      "id": "mockups",
+      "label": "Mockups",
+      "groups": [
+        {
+          "id": "apple-redesign",
+          "label": "Apple Minimal Redesign",
+          "files": [
+            {
+              "path": "mockups/apple_sleek_mockup.png",
+              "label": "iOS Mobile Sleek Mockup"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "design-systems",
+      "label": "Design Systems",
+      "groups": [
+        {
+          "id": "apple-design-tokens",
+          "label": "Apple Design Tokens",
+          "files": [
+            {
+              "path": "design-systems/apple_minimal_design.md",
+              "label": "Apple Minimal Design Token Guide"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

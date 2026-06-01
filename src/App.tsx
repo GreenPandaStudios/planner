@@ -17,7 +17,10 @@ import {
   ArrowRight,
   ArrowLeft,
   Lock,
-  Shield
+  Shield,
+  Star,
+  Play,
+  TrendingUp
 } from 'lucide-react';
 import type { Task, AppSettings, AgentChatMessage, Person, TaskMetadata } from './types';
 import { 
@@ -245,7 +248,7 @@ export default function App() {
   const [isIOS, setIsIOS] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     const saved = localStorage.getItem('antigravity_planner_show_onboarding');
-    return saved !== null ? JSON.parse(saved) : true;
+    return saved !== null ? JSON.parse(saved) : false;
   });
 
   const toggleOnboarding = () => {
@@ -1881,66 +1884,70 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   </p>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {task.status !== 'done' && (
-                      <button
-                        className="focus-btn"
-                        onClick={(e) => handleToggleToday(task, e)}
-                        style={{
-                          background: task.today ? 'rgba(29, 78, 216, 0.15)' : 'rgba(29, 78, 216, 0.05)',
-                          color: 'var(--accent-primary)',
-                          border: 'none',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '0.35rem 0.65rem',
-                          fontSize: '0.72rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.25rem',
-                          minHeight: '36px',
-                          transition: 'background 0.2s',
-                        }}
-                      >
-                        {task.today ? '★ Today' : '☆ Today'}
-                      </button>
-                    )}
-                    {task.points >= 3 && task.status !== 'done' && (
-                      <button
-                        className="focus-btn"
-                        onClick={() => setFocusTask(task)}
-                        style={{
-                          background: 'rgba(29, 78, 216, 0.08)',
-                          color: 'var(--accent-primary)',
-                          border: 'none',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '0.35rem 0.65rem',
-                          fontSize: '0.72rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.25rem',
-                          minHeight: '36px',
-                          transition: 'background 0.2s',
-                        }}
-                      >
-                        ▶ Focus
-                      </button>
-                    )}
-                    {task.requestedBy && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
-                        <User size={11} /> {task.delegated ? `delegated to ${task.requestedBy}` : `for ${task.requestedBy}`}
-                      </span>
-                    )}
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginTop: '0.5rem', gap: '0.8rem', width: '100%' }}>
+                  {task.status !== 'done' && (
+                    <button
+                      type="button"
+                      className="task-card-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); handleToggleToday(task, e); }}
+                      title={task.today ? "Remove from Today" : "Add to Today"}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: task.today ? 'var(--color-warning)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '0.2rem',
+                        transition: 'color var(--transition-fast)'
+                      }}
+                    >
+                      <Star size={15} fill={task.today ? 'var(--color-warning)' : 'none'} />
+                    </button>
+                  )}
+                  {task.points >= 3 && task.status !== 'done' && (
+                    <button
+                      type="button"
+                      className="task-card-icon-btn"
+                      onClick={(e) => { e.stopPropagation(); setFocusTask(task); }}
+                      title="Start Focus Session"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '0.2rem',
+                        transition: 'color var(--transition-fast)'
+                      }}
+                    >
+                      <Play size={14} fill="currentColor" />
+                    </button>
+                  )}
+                  {task.requestedBy && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                      <User size={12} style={{ color: 'var(--text-muted)' }} /> {task.requestedBy}
+                    </span>
+                  )}
                   <button 
-                    className="task-action-btn delete-btn" 
-                    onClick={() => handleDeleteTask(task.id)}
+                    type="button"
+                    className="task-card-icon-btn delete-btn" 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
                     title="Delete Task"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '0.2rem',
+                      marginLeft: 'auto',
+                      transition: 'color var(--transition-fast)'
+                    }}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={15} />
                   </button>
                 </div>
               </div>
@@ -1987,7 +1994,21 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           </span>
         </div>
 
-        <div className="header-actions" style={{ position: 'relative' }}>
+        <div className="header-actions" style={{ position: 'relative', display: 'flex', gap: '0.4rem' }}>
+          <button 
+            className="btn-icon" 
+            onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+            title="Insights & Velocity"
+            aria-label="Insights & Velocity"
+            style={{ 
+              background: isInsightsOpen ? 'rgba(0, 0, 0, 0.05)' : 'transparent',
+              borderColor: isInsightsOpen ? 'var(--accent-primary)' : 'var(--border-color)',
+              color: isInsightsOpen ? 'var(--accent-primary)' : 'var(--text-secondary)'
+            }}
+          >
+            <TrendingUp size={18} />
+          </button>
+          
           <button 
             className="btn-icon" 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -2174,33 +2195,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         <div className="planner-main-panel" style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
 
           {/* Quick Capture Input Form */}
-          <form 
-            onSubmit={handleQuickAdd} 
-            className="glass animate-fade-in" 
-            style={{ 
-              display: 'flex', 
-              gap: '0.5rem', 
-              padding: '0.5rem 0.8rem', 
-              background: '#fff', 
-              borderBottom: '3px solid var(--border-color)', 
-              marginBottom: '1rem', 
-              alignItems: 'center' 
-            }}
-          >
+          <form onSubmit={handleQuickAdd} className="quick-capture-form animate-fade-in">
             <input 
               type="text" 
-              className="form-control" 
-              style={{ 
-                flexGrow: 1, 
-                border: 'none', 
-                background: 'transparent', 
-                fontSize: '0.9rem', 
-                padding: '0.3rem 0',
-                outline: 'none',
-                fontFamily: 'var(--font-sans)',
-                color: 'var(--text-primary)'
-              }}
-              placeholder='✏️ Add a task — AI will size and schedule it in the background'
+              className="quick-capture-input" 
+              placeholder="✏️ Add a task — AI will size and schedule it"
               ref={quickCaptureInputRef}
               autoFocus={true}
               value={quickTaskTitle}
@@ -2208,18 +2207,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             />
             <button 
               type="submit" 
-              className="btn-primary" 
-              style={{ 
-                padding: '0.4rem 0.8rem', 
-                fontSize: '0.8rem', 
-                borderRadius: 'var(--radius-sm)', 
-                margin: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.2rem'
-              }}
+              className="quick-capture-submit" 
+              disabled={!quickTaskTitle.trim()}
+              title="Add Task"
             >
-              <Plus size={14} /> Add
+              <Plus size={16} />
             </button>
           </form>
 
@@ -2292,39 +2284,31 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           </div>
 
           {/* Insights & Trends Card */}
-          <div className="capacity-card glass" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
-                📈 Daily Velocity & Insights
-              </span>
-              <button 
-                type="button"
-                className="btn-secondary" 
-                onClick={() => setIsInsightsOpen(!isInsightsOpen)}
-                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem', minHeight: '28px', width: 'auto' }}
-              >
-                {isInsightsOpen ? 'Hide Insights' : 'Show Insights'}
-              </button>
-            </div>
+          {isInsightsOpen && (
+            <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
+                  📈 Daily Velocity & Insights
+                </span>
+              </div>
 
-            {isInsightsOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.8rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.2rem' }}>
                 
                 {/* Stats Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', textAlign: 'center' }}>
-                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().streak}🔥
                     </div>
                     <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
                   </div>
-                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().averageDaily}
                     </div>
                     <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
                   </div>
-                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().totalPoints}
                     </div>
@@ -2388,60 +2372,24 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 </div>
 
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Work / Personal Context Switcher */}
-          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0px' }}>
+          <div className="segmented-control">
             <button
               type="button"
+              className={`segment-item ${appMode === 'work' ? 'active' : ''}`}
               onClick={() => handleSetAppMode('work')}
-              style={{
-                flex: 1,
-                border: '1px solid var(--border-color)',
-                borderBottom: appMode === 'work' ? '2px solid var(--accent-primary)' : 'none',
-                borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
-                background: appMode === 'work' ? 'var(--bg-surface)' : 'transparent',
-                color: appMode === 'work' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                padding: '0.6rem 1rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.35rem',
-                minHeight: '44px',
-                transition: 'all 0.15s ease',
-                outline: 'none'
-              }}
             >
-              💼 Work Backlog
+              💼 Work
             </button>
             <button
               type="button"
+              className={`segment-item ${appMode === 'personal' ? 'active' : ''}`}
               onClick={() => handleSetAppMode('personal')}
-              style={{
-                flex: 1,
-                border: '1px solid var(--border-color)',
-                borderBottom: appMode === 'personal' ? '2px solid var(--accent-primary)' : 'none',
-                borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
-                background: appMode === 'personal' ? 'var(--bg-surface)' : 'transparent',
-                color: appMode === 'personal' ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                padding: '0.6rem 1rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.35rem',
-                minHeight: '44px',
-                transition: 'all 0.15s ease',
-                outline: 'none'
-              }}
             >
-              🏠 Personal Backlog
+              🏠 Personal
             </button>
           </div>
 
@@ -2701,7 +2649,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
           <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="form-group">
-              <label htmlFor="settings-openai-key" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label htmlFor="settings-openai-key" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
                 <Key size={14} /> OpenAI API Key
               </label>
               <input 
@@ -2712,13 +2660,10 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 onChange={e => setSettings({ ...settings, openaiApiKey: e.target.value })}
                 placeholder="sk-..."
               />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Required to enable the AI Capacity Assistant. Stored only in your local browser.
-              </span>
             </div>
 
             <div className="form-group">
-              <label htmlFor="settings-github-pat" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label htmlFor="settings-github-pat" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
                 <Globe size={14} /> GitHub Personal Access Token (PAT)
               </label>
               <input 
@@ -2729,78 +2674,77 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 onChange={e => setSettings({ ...settings, githubPat: e.target.value })}
                 placeholder="ghp_..."
               />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Required to sync tasks across your phone and computer. Needs `gist` scope.
-              </span>
               <details style={{ marginTop: '0.3rem', fontSize: '0.72rem' }}>
                 <summary style={{ cursor: 'pointer', color: 'var(--accent-primary)', fontWeight: 500 }}>
-                  How do I get a GitHub Personal Access Token (PAT)?
+                  Token Help
                 </summary>
                 <ol style={{ paddingLeft: '1.2rem', marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', color: 'var(--text-secondary)' }}>
-                  <li>Go to <strong>GitHub.com</strong> and sign in.</li>
-                  <li>Click your Profile Photo &gt; <strong>Settings</strong> &gt; <strong>Developer settings</strong> (at the bottom of the sidebar).</li>
-                  <li>Select <strong>Personal access tokens</strong> &gt; <strong>Tokens (classic)</strong>.</li>
-                  <li>Click <strong>Generate new token</strong> (classic).</li>
-                  <li>Give it a description, check the <strong>gist</strong> scope, and click <strong>Generate token</strong>.</li>
-                  <li>Copy the resulting token string and paste it into the field above.</li>
+                  <li>Go to Settings &gt; Developer settings &gt; Tokens (classic) on GitHub.</li>
+                  <li>Generate classic token with <strong>gist</strong> scope.</li>
+                  <li>Copy/paste token here.</li>
                 </ol>
               </details>
             </div>
 
             <div className="form-group">
-              <label htmlFor="settings-gist-id">Gist Database ID (Auto-Managed)</label>
+              <label htmlFor="settings-limit" style={{ fontWeight: 600 }}>Weekly Points Limit</label>
               <input 
-                id="settings-gist-id"
-                type="text" 
+                id="settings-limit"
+                type="number" 
                 className="form-control" 
-                value={settings.gistId}
-                onChange={e => setSettings({ ...settings, gistId: e.target.value })}
-                placeholder="Created automatically upon token save"
+                value={settings.weeklyPointsLimit}
+                onChange={e => setSettings({ ...settings, weeklyPointsLimit: Number(e.target.value) })}
+                min={5}
+                max={100}
+                required
               />
             </div>
 
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label htmlFor="settings-limit">Weekly Points Limit</label>
-                <input 
-                  id="settings-limit"
-                  type="number" 
-                  className="form-control" 
-                  value={settings.weeklyPointsLimit}
-                  onChange={e => setSettings({ ...settings, weeklyPointsLimit: Number(e.target.value) })}
-                  min={5}
-                  max={100}
-                  required
-                />
-              </div>
+            <details style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem', marginTop: '0.4rem' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem' }}>
+                Advanced Settings
+              </summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.8rem' }}>
+                <div className="form-group">
+                  <label htmlFor="settings-gist-id">Gist Database ID</label>
+                  <input 
+                    id="settings-gist-id"
+                    type="text" 
+                    className="form-control" 
+                    value={settings.gistId}
+                    onChange={e => setSettings({ ...settings, gistId: e.target.value })}
+                    placeholder="Created automatically"
+                  />
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="settings-daily-limit">Daily Points Limit</label>
-                <input 
-                  id="settings-daily-limit"
-                  type="number" 
-                  className="form-control" 
-                  value={settings.dailyPointsLimit || 7}
-                  onChange={e => setSettings({ ...settings, dailyPointsLimit: Number(e.target.value) })}
-                  min={1}
-                  max={30}
-                  required
-                />
-              </div>
-            </div>
+                <div className="form-group">
+                  <label htmlFor="settings-daily-limit">Daily Points Limit</label>
+                  <input 
+                    id="settings-daily-limit"
+                    type="number" 
+                    className="form-control" 
+                    value={settings.dailyPointsLimit || 7}
+                    onChange={e => setSettings({ ...settings, dailyPointsLimit: Number(e.target.value) })}
+                    min={1}
+                    max={30}
+                    required
+                  />
+                </div>
 
-            <div className="form-group" style={{ marginTop: '0.8rem' }}>
-              <label htmlFor="settings-triage-prompt">AI Triage Instructions (Triage System Prompt)</label>
-              <textarea 
-                id="settings-triage-prompt"
-                className="form-control" 
-                rows={3}
-                value={settings.customTriagePrompt || ''}
-                onChange={e => setSettings({ ...settings, customTriagePrompt: e.target.value })}
-                placeholder="e.g. Prioritize coding tasks. Health items must always go to Focus Today. Size admin tasks as 1 point."
-                style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', resize: 'vertical', minHeight: '80px' }}
-              />
-            </div>
+                <div className="form-group">
+                  <label htmlFor="settings-triage-prompt">AI Triage Instructions</label>
+                  <textarea 
+                    id="settings-triage-prompt"
+                    className="form-control" 
+                    rows={3}
+                    value={settings.customTriagePrompt || ''}
+                    onChange={e => setSettings({ ...settings, customTriagePrompt: e.target.value })}
+                    placeholder="e.g. Prioritize coding tasks. Health items must always go to Focus Today. Size admin tasks as 1 point."
+                    style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', resize: 'vertical', minHeight: '80px' }}
+                  />
+                </div>
+              </div>
+            </details>
 
             <div className="form-actions">
               <button type="submit" className="btn-primary">
