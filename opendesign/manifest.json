@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-01T23:18:43Z",
+  "generated": "2026-06-01T23:22:43Z",
   "sections": [
     {
       "id": "mockups",
@@ -12,6 +12,10 @@
             {
               "path": "mockups/apple_sleek_mockup.png",
               "label": "iOS Mobile Sleek Mockup"
+            },
+            {
+              "path": "mockups/modern_apple_mockup.png",
+              "label": "Modern Apple iOS 17 Mesh Mockup"
             }
           ]
         }

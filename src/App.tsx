@@ -2760,36 +2760,41 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       {/* Undo Toast */}
       {showUndoToast && deletedTaskBackup && (
         <div 
-          className="glass-elevated animate-fade-in" 
+          className="animate-fade-in" 
           style={{ 
             position: 'fixed', 
             bottom: '5rem',
             left: '50%', 
             transform: 'translateX(-50%)', 
-            background: '#fdfbdf', 
-            border: '1px solid #e7df95',
-            borderBottom: '3px solid var(--border-color)',
-            padding: '0.6rem 1.2rem', 
+            background: 'rgba(28, 28, 30, 0.95)', 
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '0.5rem 1.2rem', 
             zIndex: 10000, 
             display: 'flex', 
             alignItems: 'center', 
             gap: '1rem',
-            borderRadius: 'var(--radius-md)',
+            borderRadius: '99px',
             whiteSpace: 'nowrap',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
           }}
         >
-          <span style={{ fontSize: '0.82rem', color: '#6d6528', fontWeight: 500 }}>
-            Deleted: "<strong>{deletedTaskBackup.title}</strong>"
+          <span style={{ fontSize: '0.82rem', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
+            Deleted "{deletedTaskBackup.title}"
           </span>
           <button 
             type="button"
             onClick={handleUndoDelete}
-            className="btn-primary"
             style={{ 
-              padding: '0.3rem 0.7rem', 
-              fontSize: '0.8rem', 
-              margin: 0, 
-              minHeight: '36px',
+              background: 'transparent',
+              border: 'none',
+              color: '#0A84FF',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              padding: '0.2rem 0.5rem',
+              margin: 0,
             }}
           >
             Undo

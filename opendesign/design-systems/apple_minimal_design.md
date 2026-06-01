@@ -1,81 +1,68 @@
-# Apple Minimal Design Token Guide
+# Modern Apple Design Token Guide
 
-This guide outlines the design principles, color values, typography, and component structures implemented to achieve a calm, clean, iOS-inspired interface for FocusBoundary.
-
----
-
-## 1. Design Principles
-
-*   **Content Over Chrome:** Interface elements are minimal. Content (tasks, weekly capacity) stands out without visual distractions like dot patterns, grid lines, or heavy borders.
-*   **Intentional Visual Hierarchy:** Weight differences (regular, medium, semibold) and neutral contrast guide focus naturally.
-*   **Calm & Focused Palette:** Utilizes Apple-like neutral light backgrounds (`#f5f5f7`), pure white cards (`#ffffff`), and thin border separation (`#e5e5e7`).
-*   **Purposeful Icons:** Avoids wordy button text. Instead, clean, familiar icons (`Plus`, `Trash2`, `Star`, `Play`, `SettingsIcon`, `TrendingUp`) represent actions.
-*   **iOS-like Touch Target Density:** Minimum touch target sizes of 44px for easy mobile manipulation, with soft, rounded corners (`12px` and `20px`).
+This guide outlines the modern iOS 17 / macOS Sonoma design system implemented to give FocusBoundary a beautiful, calm, material-centric interface.
 
 ---
 
-## 2. Global CSS Design Tokens
+## 1. Design Language & Principles
 
-The following design tokens are configured in `src/index.css`:
+*   **Materials & Transparency (Vibrancy):** Utilizes translucent layers with heavy backdrop filters (`blur(20px)`) over a soft mesh background gradient, mimicking Apple's dynamic wallpapers.
+*   **Border highlights instead of hard dividers:** Elements use semi-transparent borders (`rgba(255,255,255,0.5)`) to catch highlights, while standard lines are extremely thin (`rgba(0,0,0,0.05)`).
+*   **iOS 17 Micro-Capsules:** Notifications and indicators use fully rounded capsule geometry with high visual contrast.
+*   **Squircular Geometry:** Containers and buttons utilize larger, smoother rounded corners (`14px` and `22px`) mimicking iOS home screen widgets.
+*   **Calm Color Fields:** Primary areas employ high transparency white backgrounds (`rgba(255,255,255,0.7)`) to absorb the Siri-like gradient background colors.
+
+---
+
+## 2. Dynamic Material Tokens (`src/index.css`)
 
 ```css
 :root {
-  /* Color Palette */
-  --bg-base: #f5f5f7;        /* Calming iOS system gray background */
-  --bg-surface: #ffffff;     /* Pure white card and sheet background */
-  --border-color: #e5e5e7;   /* Apple hairline light border separation */
-  --border-hover: #d2d2d7;   
+  /* Dynamic Material Color Palette */
+  --bg-base: #f5f5f7; 
+  --bg-surface: rgba(255, 255, 255, 0.7);       /* Translucent glass sheet */
+  --bg-surface-solid: #ffffff;
+  --bg-surface-elevated: rgba(255, 255, 255, 0.85);
   
-  --text-primary: #1d1d1f;   /* Pitch gray-black for primary headers */
-  --text-secondary: #86868b; /* Secondary neutral gray for descriptions */
-  --text-muted: #a1a1a6;     /* Shaded neutral gray for hints */
+  --border-color: rgba(0, 0, 0, 0.05);           /* Hairline card boundary */
+  --border-glass: rgba(255, 255, 255, 0.5);       /* Glass highlighted edge */
   
-  /* System Accents */
-  --accent-primary: #0071e3; /* iOS Blue */
-  --accent-cyan: #30b0c7;    /* Teal */
-  --accent-purple: #af52de;  /* Violet */
+  --text-primary: #1d1d1f; 
+  --text-secondary: #86868b; 
+  --text-muted: #a1a1a6;
   
-  /* Status Colors */
-  --color-success: #34c759;  /* Green */
-  --color-warning: #ff9500;  /* Orange */
-  --color-danger: #ff3b30;   /* Red */
+  /* System Accent Markers */
+  --accent-primary: #0071e3;                     /* SF Blue */
+  --accent-cyan: #30b0c7;
+  --accent-purple: #af52de;                      /* SF Purple */
 
-  /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Corner Geometry */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;                             /* Apple Squircle emulation */
 
-  /* Corner Radii */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;          /* Soft card corners matching iOS widgets */
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.06);
+  /* Diffuse iOS Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.06);
 }
 ```
 
 ---
 
-## 3. Key Components Refactored
+## 3. Component Details
 
-### 3.1 iOS Segmented Context Switcher
-Replaced standard tabs with a fluid, containerized segmented control:
-*   A rounded gray wrapper (`rgba(120, 120, 128, 0.06)`) holding tab pills.
-*   The active segment features a white background with a soft card shadow (`box-shadow: 0 1px 3px rgba(0,0,0,0.08)`).
-*   Inactive segments are transparent and blend into the control.
+### 3.1 Siri Mesh Wallpaper Background
+The viewport background is styled using a fixed-position mesh overlay composed of four intersecting radial gradients that create a soft, abstract gradient (mixing light-blue, soft purple, and warm peach hues) behind the planner sheet.
 
-### 3.2 Quick Capture Input Bar
-Refactored the bulky Quick Add card to match the sleek appearance of Apple's Spotlight search:
-*   Fluid, rounded capsule (`border-radius: var(--radius-md)`).
-*   Solid light gray background, shifting smoothly to pure white with a soft blue halo on active focus.
-*   Action button simplified to a single circular `Plus` icon, keeping text labels hidden.
+### 3.2 Floating Glass Columns
+*   Kanban columns (`.weekday-column`) use translucent glass styling (`background: rgba(255,255,255,0.45)`, `backdrop-filter: blur(15px)`) and are styled as widgets.
+*   Header and section separators are thin hairlines. Old diary top-borders are removed.
 
 ### 3.3 Task Cards & Checkboxes
-*   Checkboxes are designed as custom circular rings. Checking a task fills the circle with the accent blue and renders a crisp white checkmark.
-*   Points indicator is rendered as a clean, rounded light pill (`3` or `5`) instead of a circled graphite border.
-*   Action buttons at the bottom of task cards are simplified to clean icon buttons (`Star`, `Play`, `Trash2`), reducing visual noise.
+*   **Translucent Squircle Cards:** Task cards use `rgba(255,255,255,0.88)` backgrounds with a very soft shadow (`0 4px 12px rgba(0,0,0,0.02)`).
+*   **Fluid Hover State:** Cards scale smoothly by 1% (`scale(1.01)`) and slide upward on active mouse hover, rendering a soft shadow.
+*   **Reminders Circular Checkbox:** Minimalist circular outline that fills solid blue on check with a white vector tick mark.
 
-### 3.4 Collapsed Advanced Settings
-Uncluttered the settings form by moving parameters like Gist IDs, daily limit values, and AI instruction textareas to a collapsible details block. Only the essential connection keys and weekly capacity bounds are visible by default.
+### 3.4 Floating iOS Notification Toast
+Replaced the yellow warning undo bar with a floating dark grey capsule (`background: rgba(28,28,30,0.95)`, `backdrop-filter: blur(10px)`) that mimics iOS Dynamic Island messages.
