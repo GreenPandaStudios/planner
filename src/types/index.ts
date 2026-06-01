@@ -30,6 +30,8 @@ export interface Task {
   metadata?: TaskMetadata;
   parentProject?: string; // Name of the parent task this was broken from
   today?: boolean; // Scheduled for Focus Today
+  delegated?: boolean; // Has this task been delegated
+  delegatedTo?: string; // Who this task was delegated to
 }
 
 export interface AppSettings {

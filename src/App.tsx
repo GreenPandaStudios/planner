@@ -222,6 +222,15 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [appMode, setAppMode] = useState<'work' | 'personal'>(() => {
+    const saved = localStorage.getItem('antigravity_planner_mode');
+    return (saved === 'work' || saved === 'personal') ? saved : 'work';
+  });
+
+  const handleSetAppMode = (mode: 'work' | 'personal') => {
+    setAppMode(mode);
+    localStorage.setItem('antigravity_planner_mode', mode);
+  };
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -249,6 +258,7 @@ export default function App() {
   const [taskToday, setTaskToday] = useState(false);
   const [taskWeek, setTaskWeek] = useState('');
   const [taskRequestedBy, setTaskRequestedBy] = useState('');
+  const [taskDelegated, setTaskDelegated] = useState(false);
   const [quickTaskTitle, setQuickTaskTitle] = useState('');
 
   // --- Pending Task State (when capacity exceeded) ---
@@ -329,6 +339,11 @@ export default function App() {
     getTodaySuggestion(loadedTasks, week, loadedSettings.openaiApiKey)
       .then(suggestion => setTodaySuggestion(suggestion))
       .catch(() => {});
+
+    // Auto-focus quick-add input on startup
+    setTimeout(() => {
+      quickCaptureInputRef.current?.focus();
+    }, 50);
   }, []);
 
   // --- PWA Install Prompt & iOS Support ---
@@ -699,6 +714,7 @@ export default function App() {
     setTaskDesc('');
     setTaskPoints(1);
     setTaskRequestedBy('');
+    setTaskDelegated(false);
     
     if (section === 'today') {
       setTaskToday(true);
@@ -725,6 +741,7 @@ export default function App() {
     setTaskToday(!!task.today);
     setTaskWeek(task.week);
     setTaskRequestedBy(task.requestedBy || '');
+    setTaskDelegated(!!task.delegated);
     setIsTaskModalOpen(true);
   };
 
@@ -763,7 +780,7 @@ export default function App() {
         createdAt: Date.now(),
         requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
         parentProject: parentTitle,
-        metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: 'work', sentiment: 'neutral' },
+        metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: appMode, sentiment: 'neutral' },
       }));
 
       let updatedTasks = [...tasks, ...newSubtasks];
@@ -777,6 +794,7 @@ export default function App() {
 
     // --- Single task flow ---
     const parsedMeta = parseTaskMetadataLocally(triage!.title);
+    parsedMeta.domain = appMode;
     const requesterMatch = raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
     const assignedRequester = requesterMatch?.[1];
 
@@ -874,24 +892,58 @@ export default function App() {
       ? parseTaskMetadataLocally(taskTitle, taskDesc) 
       : (editingTask.metadata || parseTaskMetadataLocally(taskTitle, taskDesc));
 
+    if (!localMeta.domain) {
+      localMeta.domain = appMode;
+    }
+
+    // Delegation checks
+    const wasDelegatedBefore = !!editingTask?.delegated;
+    const delegatedToBefore = editingTask?.delegatedTo || '';
+    const isNowDelegated = taskDelegated && !!cleanedName;
+    const finalPoints = isNowDelegated ? 1 : taskPoints;
+
     const proposedTask: Task = {
       id: editingTask?.id || Math.random().toString(36).substring(2, 9),
       title: taskTitle,
       description: taskDesc,
-      points: taskPoints,
+      points: finalPoints as 1 | 2 | 3 | 5 | 8,
       week: taskWeek,
       today: taskToday,
       status: (editingTask?.status || 'todo') as 'todo' | 'in-progress' | 'done',
       createdAt: editingTask?.createdAt || Date.now(),
       requestedBy: cleanedName || undefined,
       metadata: localMeta,
+      delegated: isNowDelegated || undefined,
+      delegatedTo: isNowDelegated ? cleanedName : undefined,
     };
+
+    let followUpTask: Task | null = null;
+    if (isNowDelegated && (!wasDelegatedBefore || delegatedToBefore !== cleanedName)) {
+      followUpTask = {
+        id: Math.random().toString(36).substring(2, 9),
+        title: `Follow up with ${cleanedName} on: ${taskTitle}`,
+        description: `Follow up on delegated task: ${taskDesc || ''}`,
+        points: 1,
+        week: taskWeek,
+        today: taskToday,
+        status: 'todo',
+        createdAt: Date.now(),
+        metadata: {
+          domain: localMeta?.domain || appMode || 'work',
+          priority: 'medium',
+          energyLevel: 'low',
+          sentiment: 'neutral',
+          urgency: 'critical',
+          aiEnriched: true
+        }
+      };
+    }
 
     const currentPointsExcludeTarget = tasks
       .filter(t => t.week === proposedTask.week && t.status !== 'done' && t.id !== proposedTask.id)
       .reduce((sum, t) => sum + t.points, 0);
 
-    const totalProposedPoints = currentPointsExcludeTarget + proposedTask.points;
+    const totalProposedPoints = currentPointsExcludeTarget + proposedTask.points + (followUpTask ? followUpTask.points : 0);
 
     // Check if requester exists, if not register them
     let nextPeople = people;
@@ -918,6 +970,11 @@ export default function App() {
       updatedTasks = tasks.map(t => t.id === proposedTask.id ? proposedTask : t);
     } else {
       updatedTasks = [...tasks, proposedTask];
+    }
+
+    if (followUpTask) {
+      updatedTasks = [...updatedTasks, followUpTask];
+      addToast(`Created follow-up task for ${cleanedName}`);
     }
 
     setIsTaskModalOpen(false);
@@ -1267,6 +1324,16 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
   const dailyHistory = getDailyCompletionHistory();
   const maxPts = Math.max(...dailyHistory.map(d => d.pts), 5);
 
+  const modeFilteredTasks = tasks.filter(t => {
+    const domain = t.metadata?.domain;
+    if (!domain) return true;
+    if (appMode === 'work') {
+      return domain === 'work';
+    } else {
+      return domain === 'personal' || domain === 'health' || domain === 'other';
+    }
+  });
+
   // AI Dialog breakdown per person
   const pointsPerPerson: Record<string, number> = {};
   if (pendingTaskAction) {
@@ -1515,7 +1582,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     )}
                     {task.requestedBy && (
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
-                        <User size={11} /> for {task.requestedBy}
+                        <User size={11} /> {task.delegated ? `delegated to ${task.requestedBy}` : `for ${task.requestedBy}`}
                       </span>
                     )}
                   </div>
@@ -1973,12 +2040,66 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             )}
           </div>
 
+          {/* Work / Personal Context Switcher */}
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.4rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0px' }}>
+            <button
+              type="button"
+              onClick={() => handleSetAppMode('work')}
+              style={{
+                flex: 1,
+                border: '1px solid var(--border-color)',
+                borderBottom: appMode === 'work' ? '2px solid var(--accent-primary)' : 'none',
+                borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+                background: appMode === 'work' ? 'var(--bg-surface)' : 'transparent',
+                color: appMode === 'work' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                padding: '0.6rem 1rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.35rem',
+                minHeight: '44px',
+                transition: 'all 0.15s ease',
+                outline: 'none'
+              }}
+            >
+              💼 Work Backlog
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetAppMode('personal')}
+              style={{
+                flex: 1,
+                border: '1px solid var(--border-color)',
+                borderBottom: appMode === 'personal' ? '2px solid var(--accent-primary)' : 'none',
+                borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+                background: appMode === 'personal' ? 'var(--bg-surface)' : 'transparent',
+                color: appMode === 'personal' ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                padding: '0.6rem 1rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.35rem',
+                minHeight: '44px',
+                transition: 'all 0.15s ease',
+                outline: 'none'
+              }}
+            >
+              🏠 Personal Backlog
+            </button>
+          </div>
+
           {/* Stacked Horizons Sections */}
           <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
-            {renderTaskSectionList('Focus Today', 'today', tasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
-            {renderTaskSectionList("This Week's Backlog", 'week', tasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
-            {renderTaskSectionList('Next Week', 'next-week', tasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
-            {renderTaskSectionList('Later', 'later', tasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
+            {renderTaskSectionList('Focus Today', 'today', modeFilteredTasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
+            {renderTaskSectionList("This Week's Backlog", 'week', modeFilteredTasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
+            {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
+            {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
           </main>
 
 
@@ -2026,8 +2147,9 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 <select 
                   id="task-points-select"
                   className="form-control"
-                  value={taskPoints}
+                  value={taskDelegated ? 1 : taskPoints}
                   onChange={e => setTaskPoints(Number(e.target.value) as any)}
+                  disabled={taskDelegated}
                 >
                   <option value={1}>1 pt — Quick (&lt;30m)</option>
                   <option value={2}>2 pts — Minor (1-2h)</option>
@@ -2084,6 +2206,21 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 ))}
               </datalist>
             </div>
+
+            {taskRequestedBy.trim() !== '' && (
+              <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', margin: '0.2rem 0' }}>
+                <input 
+                  id="task-delegate-checkbox"
+                  type="checkbox"
+                  checked={taskDelegated}
+                  onChange={e => setTaskDelegated(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <label htmlFor="task-delegate-checkbox" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', userSelect: 'none' }}>
+                  🤝 Assign to this person (Delegate task and reduce size to 1 pt)
+                </label>
+              </div>
+            )}
 
             <div className="form-actions">
               <button type="button" className="btn-secondary" onClick={() => setIsTaskModalOpen(false)}>
