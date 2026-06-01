@@ -1794,7 +1794,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                       <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 500 }}>
                         {task.title}
                       </span>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                         Sizing & scheduling in background...
                       </span>
                     </div>
@@ -1869,7 +1869,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     [swipeOffset < 0 ? 'right' : 'left']: '12px',
                     background: swipeOffset < 0 ? 'var(--accent-primary)' : 'var(--color-success)',
                     color: '#fff',
-                    fontSize: '0.68rem',
+                    fontSize: '0.74rem',
                     fontWeight: 700,
                     padding: '0.25rem 0.5rem',
                     borderRadius: 'var(--radius-sm)',
@@ -2178,23 +2178,23 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             <div className="points-helper-grid" style={{ marginTop: '0.4rem' }}>
               <div className="points-helper-col">
                 <strong>1 pt</strong>
-                <span style={{ fontSize: '0.65rem' }}>Admin / Quick (&lt;30m)</span>
+                <span style={{ fontSize: '0.76rem' }}>Admin / Quick (&lt;30m)</span>
               </div>
               <div className="points-helper-col">
                 <strong>2 pts</strong>
-                <span style={{ fontSize: '0.65rem' }}>Minor task (1-2 hours)</span>
+                <span style={{ fontSize: '0.76rem' }}>Minor task (1-2 hours)</span>
               </div>
               <div className="points-helper-col">
                 <strong>3 pts</strong>
-                <span style={{ fontSize: '0.65rem' }}>Focus block (2-4 hours)</span>
+                <span style={{ fontSize: '0.76rem' }}>Focus block (2-4 hours)</span>
               </div>
               <div className="points-helper-col">
                 <strong>5 pts</strong>
-                <span style={{ fontSize: '0.65rem' }}>Substantial (half/full day)</span>
+                <span style={{ fontSize: '0.76rem' }}>Substantial (half/full day)</span>
               </div>
               <div className="points-helper-col">
                 <strong>8 pts</strong>
-                <span style={{ fontSize: '0.65rem' }}>Complex Epic (split needed)</span>
+                <span style={{ fontSize: '0.76rem' }}>Complex Epic (split needed)</span>
               </div>
             </div>
           </div>
@@ -2287,19 +2287,19 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().streak} days
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
                   </div>
                   <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().averageDaily}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
                   </div>
                   <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                       {getVelocityStats().totalPoints}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Pts</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Pts</div>
                   </div>
                 </div>
 
@@ -2330,7 +2330,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                           justifyContent: 'flex-end' 
                         }}>
                           {item.pts > 0 && (
-                            <span style={{ fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '0.2rem' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '0.2rem' }}>
                               {item.pts}
                             </span>
                           )}
@@ -2349,7 +2349,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                             }} 
                             title={`${item.pts} points on ${item.date}`}
                           />
-                          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             {item.date}
                           </span>
                         </div>
@@ -2428,7 +2428,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                       type="button"
                       className="btn-secondary" 
                       onClick={() => setIsFocusPaused(!isFocusPaused)}
-                      style={{ padding: '0.2rem 0.5rem', minHeight: '26px', fontSize: '0.68rem', borderRadius: 'var(--radius-sm)' }}
+                      style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
                     >
                       {isFocusPaused ? 'Resume' : 'Pause'}
                     </button>
@@ -2436,7 +2436,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                       type="button"
                       className="btn-primary" 
                       onClick={handleCompleteActiveFocus}
-                      style={{ padding: '0.2rem 0.5rem', minHeight: '26px', fontSize: '0.68rem', borderRadius: 'var(--radius-sm)' }}
+                      style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
                     >
                       Done
                     </button>
@@ -2444,7 +2444,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 </div>
               </div>
 
-              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.1rem' }}>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.1rem' }}>
                 Focusing...
               </div>
             </div>

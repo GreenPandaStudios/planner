@@ -3,9 +3,9 @@
 :root {
   /* Modern Apple (iOS 17 / macOS Sonoma) Design System */
   --bg-base: #f5f5f7; 
-  --bg-surface: rgba(255, 255, 255, 0.7); /* Translucent glass */
+  --bg-surface: rgba(255, 255, 255, 0.8); /* Translucent glass (Increased from 0.7 for better readability) */
   --bg-surface-solid: #ffffff;
-  --bg-surface-elevated: rgba(255, 255, 255, 0.85);
+  --bg-surface-elevated: rgba(255, 255, 255, 0.94); /* Increased from 0.85 for high contrast */
   
   --border-color: rgba(0, 0, 0, 0.05); /* Hairline gray border */
   --border-glass: rgba(255, 255, 255, 0.5); /* Glass edge highlight */
@@ -40,6 +40,10 @@
   
   --transition-fast: 0.12s cubic-bezier(0.25, 1, 0.5, 1);
   --transition-normal: 0.24s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 /* Base resets */

@@ -19,9 +19,9 @@
   flex-wrap: wrap;
   gap: 1rem;
   padding: 0.9rem 1.5rem;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.92); /* Increased from 0.7 for better legibility */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
@@ -183,10 +183,11 @@
 /* Onboarding Sticky Note (Post-it style) */
 .onboarding-banner {
   padding: 1rem 1.2rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  background: #fdfcf7; /* Warm cream/light yellow post-it style, solid! */
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-left: 4px solid var(--color-warning); /* Highlight edge */
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -243,8 +244,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid) !important; /* Solid white background to prevent text bleed */
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .capacity-header {
@@ -289,8 +292,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .distribution-list {
@@ -311,7 +316,7 @@
 }
 
 .dist-day-label {
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: var(--text-secondary);
   font-weight: 600;
   text-transform: uppercase;
@@ -358,12 +363,12 @@
   gap: 0.6rem;
   padding: 0.9rem;
   min-height: 250px;
-  background: rgba(255, 255, 255, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.65); /* Increased opacity from 0.45 for contrast */
+  border: 1px solid rgba(255, 255, 255, 0.75);
   box-shadow: var(--shadow-md);
   border-radius: var(--radius-md);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   transition: all var(--transition-normal);
 }
 
@@ -400,6 +405,7 @@
   gap: 0;
   flex-grow: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Butter-smooth momentum scrolling */
 }
 
 .btn-add-task-inline {
@@ -439,7 +445,7 @@
 .day-picker-btn {
   flex: 1;
   padding: 0.25rem 0;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-family: var(--font-mono);
   border-radius: 3px;
   border: 1px dashed var(--border-color);
@@ -465,42 +471,42 @@
   font-weight: 700;
 }
 
-/* Task Card (Apple Minimal Borderless design) */
+/* Task Card (Apple Premium Solid Widget Design) */
 .task-card {
-  padding: 0.75rem 0.4rem;
+  padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-  border-radius: 0;
-  box-shadow: none;
-  transition: background-color var(--transition-fast), padding var(--transition-fast), border-radius var(--transition-fast);
+  gap: 0.4rem;
+  background: var(--bg-surface-solid);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.015);
+  margin-bottom: 0.6rem;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .task-card:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .task-card:hover {
-  background: rgba(0, 0, 0, 0.025);
-  border-radius: 8px;
-  padding-left: 0.6rem;
-  padding-right: 0.6rem;
-  transform: none;
-  box-shadow: none;
+  background: var(--bg-surface-solid);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .task-card.completed {
-  opacity: 0.45;
-  background: transparent;
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.03);
   box-shadow: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .task-card.completed:hover {
-  background: rgba(0, 0, 0, 0.015);
+  background: rgba(255, 255, 255, 0.55);
+  transform: none;
+  box-shadow: none;
 }
 
 .task-card.dragging {
@@ -561,7 +567,7 @@
 .task-title {
   font-family: var(--font-sans);
   font-weight: 500;
-  font-size: 0.8rem;
+  font-size: 0.88rem; /* Increased from 0.8rem for desktop readability */
   line-height: 1.4;
   flex-grow: 1;
   text-align: left;
@@ -576,7 +582,7 @@
 
 .task-points-badge {
   font-family: var(--font-sans);
-  font-size: 0.7rem;
+  font-size: 0.76rem; /* Increased from 0.7rem for readability */
   font-weight: 600;
   padding: 0.1rem 0.45rem;
   border-radius: 10px; /* Capsule pill badge */
@@ -601,9 +607,9 @@
 }
 
 .task-desc {
-  font-size: 0.74rem;
+  font-size: 0.8rem; /* Increased from 0.74rem */
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.45; /* Increased from 1.4 */
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
@@ -694,14 +700,18 @@ dialog::backdrop {
   max-width: 100%;
   max-height: min(90dvh, 600px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid) !important; /* Solid white background to prevent text bleed */
   border: 1px solid var(--border-color);
   border-bottom: 3px solid var(--border-color);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); /* Soft shadows */
+  backdrop-filter: none !important; /* Disable translucency to prevent text bleed */
+  -webkit-backdrop-filter: none !important;
 }
 
 .modal-header {
@@ -868,7 +878,7 @@ dialog::backdrop {
 /* --- Capacity assistant Side Drawer (Turned Lined Journal Sheet) --- */
 .agent-sidebar-drawer {
   width: 100%;
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid) !important; /* Solid white background to prevent text bleed */
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   position: relative;
@@ -1076,13 +1086,14 @@ dialog::backdrop {
 }
 
 .agent-chat-subtitle {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
 .chat-message-list {
   flex-grow: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling */
   padding: 1rem;
   display: flex;
   flex-direction: column;
@@ -1100,7 +1111,7 @@ dialog::backdrop {
 
 .chat-bubble.agent {
   align-self: flex-start;
-  background: var(--bg-surface);
+  background: #f7f7f8; /* Solid light gray for agent bubbles */
   border: 1px solid var(--border-color);
   border-left: 2px solid var(--accent-purple);
   color: var(--text-primary);
@@ -1130,7 +1141,7 @@ dialog::backdrop {
   border: 1px dashed var(--border-color);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   padding: 0.25rem 0.5rem;
   border-radius: 3px;
 }
@@ -1244,6 +1255,10 @@ dialog::backdrop {
   .weekday-column { min-height: auto; padding: 0.8rem; }
   .column-title { font-size: 1.05rem; }
   .column-points-badge { font-size: 0.85rem; padding: 0.2rem 0.45rem; }
+  .task-list {
+    overflow: visible !important;
+    overflow-y: visible !important;
+  }
 
   /* Capacity card */
   .capacity-card { margin: 0.6rem; }
@@ -1329,6 +1344,7 @@ dialog::backdrop {
     width: calc(100vw - 1.5rem);
     max-height: 90dvh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Momentum scrolling */
   }
   .modal-title { font-size: 1.1rem; }
 
@@ -1385,7 +1401,7 @@ dialog::backdrop {
 }
 
 .metadata-badge {
-  font-size: 0.64rem;
+  font-size: 0.72rem;
   padding: 0.08rem 0.3rem;
   border-radius: 4px;
   font-family: var(--font-mono);
@@ -1538,7 +1554,7 @@ dialog::backdrop {
   right: 1.5rem;
   width: 380px;
   max-width: calc(100vw - 2rem);
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   border: 1px solid var(--border-color);
   border-bottom: 3px solid var(--accent-primary);
   border-radius: var(--radius-md);
@@ -1616,7 +1632,7 @@ dialog::backdrop {
 }
 
 .onboarding-setup-card {
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   border: 1px solid var(--border-color);
   border-bottom: 4px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -1839,8 +1855,9 @@ dialog::backdrop {
 }
 
 .segment-item.active {
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   color: var(--text-primary);
+  font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -1863,7 +1880,7 @@ dialog::backdrop {
 }
 
 .quick-capture-form:focus-within {
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
 }
@@ -1929,7 +1946,7 @@ dialog::backdrop {
   justify-content: center;
   cursor: pointer;
   transition: var(--transition-fast);
-  background: var(--bg-surface);
+  background: var(--bg-surface-solid);
   position: relative;
 }
 
@@ -1954,7 +1971,7 @@ dialog::backdrop {
 }
 
 .task-project-badge {
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: var(--accent-primary);
   background: rgba(0, 113, 227, 0.05);
   padding: 0.15rem 0.4rem;
@@ -1987,11 +2004,11 @@ dialog::backdrop {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 58px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    height: 62px; /* Slightly taller for better touch */
+    background: rgba(255, 255, 255, 0.96); /* Near-solid for clear contrast */
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
     z-index: 999;
     justify-content: space-around;
     align-items: center;
@@ -2005,21 +2022,23 @@ dialog::backdrop {
     justify-content: center;
     background: transparent;
     border: none;
-    color: var(--text-secondary);
-    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-size: 0.72rem; /* Increased from 0.65rem for readability */
     font-weight: 500;
-    gap: 2px;
+    gap: 3px;
     flex: 1;
     cursor: pointer;
+    min-height: 44px; /* Touch target */
     transition: color var(--transition-fast);
   }
 
   .tab-item.active {
     color: var(--accent-primary);
+    font-weight: 600;
   }
 
   .app-container {
-    padding-bottom: 70px;
+    padding-bottom: 74px; /* Increased to match taller tab bar */
   }
 }
 
