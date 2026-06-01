@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-01T23:22:43Z",
+  "generated": "2026-06-01T23:35:46Z",
   "sections": [
     {
       "id": "mockups",
@@ -15,7 +15,7 @@
             },
             {
               "path": "mockups/modern_apple_mockup.png",
-              "label": "Modern Apple iOS 17 Mesh Mockup"
+              "label": "Modern Apple macOS Sonoma Mockup"
             }
           ]
         }
@@ -26,12 +26,20 @@
       "label": "Design Systems",
       "groups": [
         {
-          "id": "apple-design-tokens",
-          "label": "Apple Design Tokens",
+          "id": "focus-boundary-system",
+          "label": "FocusBoundary Design System",
           "files": [
             {
-              "path": "design-systems/apple_minimal_design.md",
-              "label": "Apple Minimal Design Token Guide"
+              "path": "design-systems/focus-boundary/README.md",
+              "label": "Design Guidelines Index"
+            },
+            {
+              "path": "design-systems/focus-boundary/features_and_problems.md",
+              "label": "Features & Problem-Solving Matrix"
+            },
+            {
+              "path": "design-systems/focus-boundary/tokens/colors_and_type.css",
+              "label": "Sonoma CSS Design Tokens"
             }
           ]
         }

@@ -1,67 +1,73 @@
-/* FocusBoundary Design Tokens - Warm Physical Paper Notebook Aesthetic */
+/* FocusBoundary Design Tokens - Modern Apple Minimal (iOS 17 & macOS Sonoma) Aesthetic */
 
 :root {
   /* Brand Typography Fonts */
-  --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --fb-font-serif: 'Lora', Georgia, serif;
+  --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
   --fb-font-mono: 'JetBrains Mono', monospace;
 
-  /* Raw Colors - Physical Materials */
-  --fb-color-cream-paper: #faf8f5;     /* Warm journal paper background */
-  --fb-color-white-sheet: #fdfcf7;     /* Clean sheet page */
-  --fb-color-shaded-sheet: #f5f2eb;    /* Slightly shaded page edge */
-  --fb-color-graphite-dark: #1c1e21;   /* Main text, dark pencil lead */
-  --fb-color-pencil-gray: #4a4d50;     /* Subtext, slate graphite lead */
-  --fb-color-pencil-light: #7e8488;    /* Muted pencil notes */
-  --fb-color-graphite-line: #d1cbd4;   /* Notebook paper lined rule */
-  --fb-color-graphite-hover: #b4abb8;  /* Lighter rule hover */
+  /* Raw Colors - Apple Sonoma System */
+  --fb-color-gray-bg: #f5f5f7;          /* macOS base window gray background */
+  --fb-color-glass-sheet: rgba(255, 255, 255, 0.7);  /* Translucent surface sheet */
+  --fb-color-glass-elevated: rgba(255, 255, 255, 0.85); /* Dialog surface */
+  --fb-color-charcoal-dark: #1d1d1f;    /* Primary typography, deep charcoal */
+  --fb-color-slate-gray: #86868b;       /* Secondary descriptions */
+  --fb-color-slate-muted: #a1a1a6;      /* Muted tags, border labels */
+  --fb-color-hairline: rgba(0, 0, 0, 0.04);  /* Border divider line */
+  --fb-color-glass-edge: rgba(255, 255, 255, 0.5); /* Highlight overlay reflection */
 
-  /* Ink Accents */
-  --fb-color-ink-blue: #1d4ed8;        /* Blue fountain pen ink */
-  --fb-color-ink-blue-dark: #1e40af;   /* Shaded blue ink */
-  --fb-color-ink-teal: #0369a1;        /* Teal marker highlight */
-  --fb-color-ink-purple: #6d28d9;      /* Purple ink marker */
-  --fb-color-ink-green: #0f766e;       /* Forest green status ink */
-  --fb-color-ink-amber: #b45309;       /* Amber highlighter amber */
-  --fb-color-ink-red: #be123c;         /* Red correction pen ink */
+  /* Apple System Accents */
+  --fb-color-sf-blue: #0071e3;          /* SF Blue primary */
+  --fb-color-sf-blue-hover: #0077ed;    /* Highlight active hover */
+  --fb-color-sf-cyan: #30b0c7;          /* SF Cyan accent */
+  --fb-color-sf-purple: #af52de;        /* SF Purple accent */
+  --fb-color-sf-green: #34c759;         /* Success markers */
+  --fb-color-sf-orange: #ff9500;        /* Warning capacity markers */
+  --fb-color-sf-red: #ff3b30;           /* Danger capacity alerts */
 
-  /* Spacing Grid (Pencil lines distance) */
+  /* Spacing Grid */
   --fb-space-xs: 0.25rem;  /* 4px */
   --fb-space-sm: 0.5rem;   /* 8px */
   --fb-space-md: 1rem;     /* 16px */
   --fb-space-lg: 1.5rem;   /* 24px */
   --fb-space-xl: 2.25rem;  /* 36px */
 
-  /* Borders & Radius (Crisp paper cuts) */
-  --fb-radius-sm: 4px;
-  --fb-radius-md: 8px;
-  --fb-radius-lg: 12px;
-  --fb-border-width: 1px;
+  /* Corners (iOS Widget Squirclish radii) */
+  --fb-radius-sm: 10px;
+  --fb-radius-md: 14px;
+  --fb-radius-lg: 22px;
 
-  /* Shadows (Pencil drop shadow effects) */
-  --fb-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --fb-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  /* Shadows (Diffuse iOS Material drop-shadows) */
+  --fb-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.02);
+  --fb-shadow-md: 0 8px 30px rgba(0, 0, 0, 0.04);
+  --fb-shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.06);
+
+  /* Animation Timings */
+  --fb-transition-fast: 0.12s cubic-bezier(0.25, 1, 0.5, 1);
+  --fb-transition-normal: 0.24s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 /* Semantic Assignments mapped to UI elements */
-.fb-theme-warm-notebook {
-  --bg-base: var(--fb-color-cream-paper);
-  --bg-surface: var(--fb-color-white-sheet);
-  --bg-surface-elevated: var(--fb-color-shaded-sheet);
-  --border-color: var(--fb-color-graphite-line);
-  --border-hover: var(--fb-color-graphite-hover);
-  --text-primary: var(--fb-color-graphite-dark);
-  --text-secondary: var(--fb-color-pencil-gray);
-  --text-muted: var(--fb-color-pencil-light);
+.fb-theme-modern-apple {
+  --bg-base: var(--fb-color-gray-bg);
+  --bg-surface: var(--fb-color-glass-sheet);
+  --bg-surface-solid: #ffffff;
+  --bg-surface-elevated: var(--fb-color-glass-elevated);
+  --border-color: var(--fb-color-hairline);
+  --border-glass: var(--fb-color-glass-edge);
+  --border-hover: rgba(0, 0, 0, 0.1);
   
-  --accent-primary: var(--fb-color-ink-blue);
-  --accent-primary-hover: var(--fb-color-ink-blue-dark);
-  --accent-cyan: var(--fb-color-ink-teal);
-  --accent-purple: var(--fb-color-ink-purple);
+  --text-primary: var(--fb-color-charcoal-dark);
+  --text-secondary: var(--fb-color-slate-gray);
+  --text-muted: var(--fb-color-slate-muted);
   
-  --color-success: var(--fb-color-ink-green);
-  --color-warning: var(--fb-color-ink-amber);
-  --color-danger: var(--fb-color-ink-red);
+  --accent-primary: var(--fb-color-sf-blue);
+  --accent-primary-hover: var(--fb-color-sf-blue-hover);
+  --accent-cyan: var(--fb-color-sf-cyan);
+  --accent-purple: var(--fb-color-sf-purple);
+  
+  --color-success: var(--fb-color-sf-green);
+  --color-warning: var(--fb-color-sf-orange);
+  --color-danger: var(--fb-color-sf-red);
 
   font-family: var(--fb-font-sans);
 }

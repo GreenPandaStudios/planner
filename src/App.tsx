@@ -20,7 +20,18 @@ import {
   Shield,
   Star,
   Play,
-  TrendingUp
+  TrendingUp,
+  Sun,
+  Inbox,
+  Calendar,
+  Clock,
+  Briefcase,
+  Home,
+  Link2,
+  Loader2,
+  Target,
+  Sparkles,
+  Compass
 } from 'lucide-react';
 import type { Task, AppSettings, AgentChatMessage, Person, TaskMetadata } from './types';
 import { 
@@ -32,7 +43,6 @@ import {
 import { runAgentStep } from './agent/agent-engine';
 import type { AgentMessage, AgentContext } from './agent/agent-engine';
 import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion, shouldBreakDown, expandToSubtasks, getOffsetWeekFromNow, autoFillToday } from './agent/triage-engine';
-import FocusMode from './components/FocusMode';
 import './App.css';
 
 // --- Week Helper Utilities ---
@@ -296,6 +306,56 @@ export default function App() {
   const [todaySuggestion, setTodaySuggestion] = useState<string | null>(null);
   // --- Focus Mode ---
   const [focusTask, setFocusTask] = useState<Task | null>(null);
+  const [focusElapsed, setFocusElapsed] = useState(0);
+  const [isFocusPaused, setIsFocusPaused] = useState(false);
+  const [activeTab, setActiveTab] = useState<'focus' | 'backlog' | 'stats' | 'settings' | 'ai'>('focus');
+
+  // Focus Timer active hook
+  useEffect(() => {
+    if (!focusTask || isFocusPaused) return;
+    const interval = setInterval(() => {
+      setFocusElapsed(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [focusTask, isFocusPaused]);
+
+  // Start focus session helper
+  const handleStartFocus = (task: Task) => {
+    setFocusTask(task);
+    setFocusElapsed(0);
+    setIsFocusPaused(false);
+    addToast(`▶ Started focus on: ${task.title}`);
+    
+    // Smooth scroll to top of app-container to view the focus widget
+    const el = document.querySelector('.app-container');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const formatFocusTime = (seconds: number): string => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const handleCompleteActiveFocus = () => {
+    if (!focusTask) return;
+    const taskId = focusTask.id;
+    const updated = tasks.map(t => {
+      if (t.id === taskId) {
+        return { 
+          ...t, 
+          status: 'done' as const,
+          completedAt: Date.now()
+        };
+      }
+      return t;
+    });
+    saveTasksState(updated);
+    addToast('✓ Completed focused task!');
+    setFocusTask(null);
+  };
 
   // --- Drag and Drop State ---
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -1597,10 +1657,14 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
   // --- Render calculations ---
 
-  const progressPercent = Math.min((getWeekPoints(currentWeek) / settings.weeklyPointsLimit) * 100, 100);
-  let progressBarColor = 'var(--accent-cyan)';
-  if (progressPercent > 90) progressBarColor = 'var(--color-danger)';
-  else if (progressPercent > 70) progressBarColor = 'var(--accent-purple)';
+  const weekPoints = getWeekPoints(currentWeek);
+  const progressPercent = Math.min((weekPoints / settings.weeklyPointsLimit) * 100, 100);
+  let progressBarColor = 'var(--accent-primary)';
+  if (weekPoints > settings.weeklyPointsLimit) {
+    progressBarColor = 'var(--color-danger)';
+  } else if (weekPoints >= settings.weeklyPointsLimit * 0.85) {
+    progressBarColor = 'var(--color-warning)';
+  }
 
   const dailyHistory = getDailyCompletionHistory();
   const maxPts = Math.max(...dailyHistory.map(d => d.pts), 5);
@@ -1627,29 +1691,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
     });
   }
 
-  if (focusTask) {
-    return (
-      <FocusMode
-        task={focusTask}
-        onDone={(taskId) => {
-          const updated = tasks.map(t => {
-            if (t.id === taskId) {
-              return { 
-                ...t, 
-                status: 'done' as const,
-                completedAt: Date.now()
-              };
-            }
-            return t;
-          });
-          saveTasksState(updated);
-          addToast(`✓ Focused task completed!`);
-          setFocusTask(null);
-        }}
-        onExit={() => setFocusTask(null)}
-      />
-    );
-  }
+
 
   const renderTaskSectionList = (
     title: string,
@@ -1665,6 +1707,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
     return (
       <section 
+        id={`section-${sectionKey}`}
         className={`weekday-column glass ${isSectionHovered ? 'drag-hover-section' : ''}`}
         style={{ 
           width: '100%', 
@@ -1683,7 +1726,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       >
         <div className="column-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="column-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            {sectionKey === 'today' ? '☀️' : sectionKey === 'week' ? '📥' : sectionKey === 'next-week' ? '📅' : '⏳'}
+            {sectionKey === 'today' ? <Sun size={15} /> : sectionKey === 'week' ? <Inbox size={15} /> : sectionKey === 'next-week' ? <Calendar size={15} /> : <Clock size={15} />}
             {title}
           </span>
           <span className="column-points-badge" style={{ fontSize: '0.82rem', padding: '0.2rem 0.5rem' }}>
@@ -1706,7 +1749,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 alignItems: 'center',
                 gap: '0.35rem',
               }}>
-                <span>🎯</span>
+                <Target size={14} />
                 <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginRight: '0.2rem' }}>Start with:</span>
                 {todaySuggestion}
               </div>
@@ -1721,18 +1764,18 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 width: 'fit-content',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.25rem',
+                gap: '0.35rem',
                 borderColor: 'rgba(29, 78, 216, 0.3)',
                 color: 'var(--accent-primary)',
                 background: 'rgba(29, 78, 216, 0.02)'
               }}
             >
-              🪄 Auto-Fill Today
+              <Sparkles size={13} /> Auto-Fill Today
             </button>
           </div>
         )}
 
-        <div className="task-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="task-list">
           {[...todoTasks, ...doneTasks].map(task => {
             const isDraggingThis = draggedTaskId === task.id;
             const isDragOverThis = dragOverTaskId === task.id;
@@ -1746,7 +1789,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 >
                   <div className="shimmer-effect"></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', position: 'relative', zIndex: 2 }}>
-                    <span style={{ fontSize: '0.9rem', animation: 'writing-bounce 1s infinite alternate ease-in-out', display: 'inline-block' }}>✏️</span>
+                    <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent-primary)' }} />
                     <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                       <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 500 }}>
                         {task.title}
@@ -1835,25 +1878,12 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     zIndex: 10,
                     pointerEvents: 'none',
                   }}>
-                    {swipeOffset < 0 ? '💼 Move to Work' : '🏠 Move to Personal'}
+                    {swipeOffset < 0 ? 'Move to Work' : 'Move to Personal'}
                   </div>
                 )}
                 {task.parentProject && (
-                  <div style={{ 
-                    fontSize: '0.7rem', 
-                    color: 'var(--accent-primary)',
-                    background: 'rgba(29, 78, 216, 0.05)',
-                    padding: '0.15rem 0.4rem',
-                    borderRadius: '3px',
-                    marginBottom: '0.35rem', 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '0.2rem',
-                    fontWeight: 600,
-                    width: 'fit-content',
-                    fontFamily: 'var(--font-sans)',
-                  }}>
-                    <span>🔗</span>
+                  <div className="task-project-badge">
+                    <Link2 size={11} />
                     <span>{task.parentProject}</span>
                   </div>
                 )}
@@ -1884,50 +1914,31 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   </p>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '0.5rem', gap: '0.8rem', width: '100%' }}>
+                <div className="task-actions">
                   {task.status !== 'done' && (
                     <button
                       type="button"
                       className="task-card-icon-btn"
                       onClick={(e) => { e.stopPropagation(); handleToggleToday(task, e); }}
                       title={task.today ? "Remove from Today" : "Add to Today"}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: task.today ? 'var(--color-warning)' : 'var(--text-muted)',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '0.2rem',
-                        transition: 'color var(--transition-fast)'
-                      }}
+                      style={{ color: task.today ? 'var(--color-warning)' : undefined }}
                     >
-                      <Star size={15} fill={task.today ? 'var(--color-warning)' : 'none'} />
+                      <Star size={14} fill={task.today ? 'var(--color-warning)' : 'none'} />
                     </button>
                   )}
                   {task.points >= 3 && task.status !== 'done' && (
                     <button
                       type="button"
                       className="task-card-icon-btn"
-                      onClick={(e) => { e.stopPropagation(); setFocusTask(task); }}
+                      onClick={(e) => { e.stopPropagation(); handleStartFocus(task); }}
                       title="Start Focus Session"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '0.2rem',
-                        transition: 'color var(--transition-fast)'
-                      }}
                     >
-                      <Play size={14} fill="currentColor" />
+                      <Play size={13} fill="currentColor" />
                     </button>
                   )}
                   {task.requestedBy && (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                      <User size={12} style={{ color: 'var(--text-muted)' }} /> {task.requestedBy}
+                    <span className="task-assignee">
+                      <User size={11} style={{ color: 'var(--text-secondary)' }} /> {task.requestedBy}
                     </span>
                   )}
                   <button 
@@ -1935,19 +1946,8 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     className="task-card-icon-btn delete-btn" 
                     onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
                     title="Delete Task"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: '0.2rem',
-                      marginLeft: 'auto',
-                      transition: 'color var(--transition-fast)'
-                    }}
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -1977,12 +1977,23 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       <header className="app-header glass">
         <div className="brand-section">
           <h1 className="brand-title">
-            <Brain size={24} style={{ color: 'var(--accent-purple)' }} /> 
             FocusBoundary
           </h1>
-          <span className="brand-subtitle">
-            Focus & Capacity Coach
-          </span>
+          <p className="brand-subtitle-greeting">Welcome back, Alex. Your focused day starts now.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem' }}>
+            <span className="brand-subtitle" style={{ margin: 0, fontSize: '0.74rem' }}>
+              {getWeekPoints(currentWeek)}/{settings.weeklyPointsLimit} pts
+            </span>
+            <div style={{ width: '45px', height: '4px', background: 'rgba(0,0,0,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  width: `${progressPercent}%`, 
+                  height: '100%', 
+                  background: progressBarColor 
+                }} 
+              />
+            </div>
+          </div>
         </div>
 
 
@@ -2110,7 +2121,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       {showInstallBanner && (
         <div className="pwa-install-popup">
           <div className="pwa-install-header">
-            <span className="pwa-install-icon">🧠</span>
+            <span className="pwa-install-icon" style={{ display: 'inline-flex', alignItems: 'center' }}><Brain size={18} style={{ color: 'var(--accent-purple)' }} /></span>
             <div className="pwa-install-title">Add to Home Screen</div>
           </div>
           
@@ -2199,7 +2210,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             <input 
               type="text" 
               className="quick-capture-input" 
-              placeholder="✏️ Add a task — AI will size and schedule it"
+              placeholder="Add a task — FocusBoundary will schedule it"
               ref={quickCaptureInputRef}
               autoFocus={true}
               value={quickTaskTitle}
@@ -2215,80 +2226,56 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             </button>
           </form>
 
-          {/* Progress / Capacity Dashboard */}
-          <div className="capacity-card glass" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Today's Focus Load</span>
-                  <span style={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                    {getTodayPoints()} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {settings.dailyPointsLimit || 7} pts</span>
-                  </span>
-                </div>
-                <div className="capacity-bar-container" style={{ height: '6px' }}>
-                  <div 
-                    className="capacity-bar-fill" 
-                    style={{ 
-                      width: `${Math.min(100, (getTodayPoints() / (settings.dailyPointsLimit || 7)) * 100)}%`, 
-                      background: getTodayPoints() > (settings.dailyPointsLimit || 7) ? 'var(--color-danger)' : 'var(--accent-primary)' 
-                    }}
-                  />
-                </div>
+          {/* Excess Capacity Alert Banner */}
+          {(getTodayPoints() > (settings.dailyPointsLimit || 7) || getWeekPoints(currentWeek) > settings.weeklyPointsLimit) && (
+            <div className="glass-elevated animate-fade-in" style={{
+              background: 'rgba(255, 59, 48, 0.08)',
+              border: '1px solid rgba(255, 59, 48, 0.15)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.6rem 1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              fontSize: '0.82rem',
+              color: 'var(--color-danger)',
+              fontWeight: 600
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <AlertTriangle size={14} />
+                <span>Capacity limit exceeded!</span>
               </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Active Weekly Load</span>
-                  <span style={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                    {getWeekPoints(currentWeek)} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {settings.weeklyPointsLimit} pts</span>
-                  </span>
-                </div>
-                <div className="capacity-bar-container" style={{ height: '6px' }}>
-                  <div 
-                    className="capacity-bar-fill" 
-                    style={{ 
-                      width: `${progressPercent}%`, 
-                      background: getWeekPoints(currentWeek) > settings.weeklyPointsLimit ? 'var(--color-danger)' : progressBarColor 
-                    }}
-                  />
-                </div>
-              </div>
+              {settings.openaiApiKey && (
+                <button 
+                  type="button" 
+                  onClick={handleTriggerManualTriage}
+                  style={{
+                    border: 'none',
+                    background: 'var(--color-danger)',
+                    color: '#fff',
+                    padding: '0.3rem 0.6rem',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'opacity 0.15s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                >
+                  Auto-Triage
+                </button>
+              )}
             </div>
-            
-            {(getTodayPoints() > (settings.dailyPointsLimit || 7) || getWeekPoints(currentWeek) > settings.weeklyPointsLimit) && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem' }}>
-                <div style={{ color: 'var(--color-danger)', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                  <AlertTriangle size={12} /> Limit exceeded!
-                </div>
-                {settings.openaiApiKey && (
-                  <button 
-                    type="button"
-                    onClick={handleTriggerManualTriage}
-                    className="btn-primary"
-                    style={{ 
-                      padding: '0.15rem 0.4rem', 
-                      fontSize: '0.68rem', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '0.2rem', 
-                      margin: 0, 
-                      borderRadius: '3px',
-                      background: 'var(--color-danger)',
-                      borderColor: 'var(--color-danger)'
-                    }}
-                  >
-                    <Brain size={10} /> Auto-Triage
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Insights & Trends Card */}
           {isInsightsOpen && (
             <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
-                  📈 Daily Velocity & Insights
+                  <TrendingUp size={15} /> Daily Velocity & Insights
                 </span>
               </div>
 
@@ -2298,7 +2285,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', textAlign: 'center' }}>
                   <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                      {getVelocityStats().streak}🔥
+                      {getVelocityStats().streak} days
                     </div>
                     <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
                   </div>
@@ -2382,16 +2369,86 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               className={`segment-item ${appMode === 'work' ? 'active' : ''}`}
               onClick={() => handleSetAppMode('work')}
             >
-              💼 Work
+              <Briefcase size={14} /> Work
             </button>
             <button
               type="button"
               className={`segment-item ${appMode === 'personal' ? 'active' : ''}`}
               onClick={() => handleSetAppMode('personal')}
             >
-              🏠 Personal
+              <Home size={14} /> Personal
             </button>
           </div>
+
+          {/* Active Focus Card (Matches modern_apple_mockup) */}
+          {focusTask && (
+            <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Active Focus
+                </span>
+                <button 
+                  type="button"
+                  onClick={() => setFocusTask(null)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 500 }}
+                >
+                  Exit
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '1rem', marginTop: '0.2rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Deep Work</span>
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={focusTask.title}>
+                    {focusTask.title}
+                  </span>
+                </div>
+
+                {/* Progress timer circle */}
+                <div style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="60" height="60" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+                    <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(0,0,0,0.03)" strokeWidth="2.5" />
+                    <circle 
+                      cx="30" cy="30" r="26" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" 
+                      strokeDasharray={163.36}
+                      strokeDashoffset={163.36 * (1 - (focusElapsed % 1500) / 1500)}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                    />
+                  </svg>
+                  <span style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {formatFocusTime(focusElapsed)}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 1, gap: '0.2rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Mode</span>
+                  <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.1rem' }}>
+                    <button 
+                      type="button"
+                      className="btn-secondary" 
+                      onClick={() => setIsFocusPaused(!isFocusPaused)}
+                      style={{ padding: '0.2rem 0.5rem', minHeight: '26px', fontSize: '0.68rem', borderRadius: 'var(--radius-sm)' }}
+                    >
+                      {isFocusPaused ? 'Resume' : 'Pause'}
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn-primary" 
+                      onClick={handleCompleteActiveFocus}
+                      style={{ padding: '0.2rem 0.5rem', minHeight: '26px', fontSize: '0.68rem', borderRadius: 'var(--radius-sm)' }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.1rem' }}>
+                Focusing...
+              </div>
+            </div>
+          )}
 
           {/* Stacked Horizons Sections */}
           <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
@@ -3071,6 +3128,68 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             {toast.text}
           </div>
         ))}
+      </div>
+
+      {/* Mobile Bottom Tab Bar (Matches modern_apple_mockup) */}
+      <div className="mobile-tab-bar">
+        <button 
+          type="button"
+          className={`tab-item ${activeTab === 'focus' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('focus');
+            const el = document.getElementById('section-today');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        >
+          <Compass size={20} />
+          <span>Focus</span>
+        </button>
+        <button 
+          type="button"
+          className={`tab-item ${activeTab === 'backlog' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('backlog');
+            const el = document.getElementById('section-week');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        >
+          <Calendar size={20} />
+          <span>Backlog</span>
+        </button>
+        <button 
+          type="button"
+          className={`tab-item ${activeTab === 'stats' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('stats');
+            setIsInsightsOpen(!isInsightsOpen);
+            addToast(isInsightsOpen ? 'Collapsing insights stats' : 'Opening insights stats');
+          }}
+        >
+          <TrendingUp size={20} />
+          <span>Stats</span>
+        </button>
+        <button 
+          type="button"
+          className={`tab-item ${activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('settings');
+            setIsSettingsOpen(true);
+          }}
+        >
+          <SettingsIcon size={20} />
+          <span>Settings</span>
+        </button>
+        <button 
+          type="button"
+          className={`tab-item ${activeTab === 'ai' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('ai');
+            triggerManualNegotiation();
+          }}
+        >
+          <Brain size={20} />
+          <span>AI Triage</span>
+        </button>
       </div>
     </div>
   );
