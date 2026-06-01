@@ -1534,4 +1534,221 @@ dialog::backdrop {
   }
 }
 
+/* --- Setup Onboarding Overlay & Styles --- */
+.onboarding-setup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(30, 41, 59, 0.45);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150000;
+  padding: 1rem;
+}
+
+.onboarding-setup-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-bottom: 4px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  width: 500px;
+  max-width: 100%;
+  box-shadow: var(--shadow-lg), 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  padding: 2.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  background-image: radial-gradient(rgba(74, 77, 80, 0.04) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+.onboarding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 0.8rem;
+}
+
+.onboarding-brand {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.setup-pagination-dots {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.setup-pagination-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.setup-pagination-dots .dot.active {
+  background: var(--accent-purple);
+  transform: scale(1.2);
+}
+
+.setup-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.setup-title {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.setup-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.onboarding-guide-box {
+  background: #faf8f5;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  position: relative;
+}
+
+.onboarding-guide-box::before {
+  content: "";
+  position: absolute;
+  left: 0.8rem;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.guide-box-title {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  padding-left: 0.6rem;
+}
+
+.guide-box-list {
+  list-style: none;
+  padding-left: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.guide-box-list li {
+  position: relative;
+  padding-left: 0.8rem;
+}
+
+.guide-box-list li::before {
+  content: "•";
+  position: absolute;
+  left: -0.2rem;
+  color: var(--text-muted);
+}
+
+.guide-box-row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  padding-left: 0.6rem;
+}
+
+.guide-box-row strong {
+  font-size: 0.88rem;
+  display: block;
+}
+
+.setup-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.btn-large {
+  width: 100%;
+  justify-content: center;
+  padding: 0.7rem 1.2rem;
+  font-size: 0.92rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-link:hover {
+  color: var(--text-secondary);
+}
+
+.icon-blue {
+  color: var(--accent-primary);
+}
+
+.icon-purple {
+  color: var(--accent-purple);
+}
+
+.setup-success-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-md);
+  color: #15803d;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin-loader 0.8s linear infinite;
+}
+
+@keyframes spin-loader {
+  to { transform: rotate(360deg); }
+}
+
 

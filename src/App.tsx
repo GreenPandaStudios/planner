@@ -12,7 +12,12 @@ import {
   Upload,
   Globe,
   User,
-  Ban
+  Ban,
+  Check,
+  ArrowRight,
+  ArrowLeft,
+  Lock,
+  Shield
 } from 'lucide-react';
 import type { Task, AppSettings, AgentChatMessage, Person, TaskMetadata } from './types';
 import { 
@@ -301,6 +306,15 @@ export default function App() {
   const [swipeCurrentX, setSwipeCurrentX] = useState<number>(0);
   const [isSwipingHorizontal, setIsSwipingHorizontal] = useState<boolean>(false);
 
+  // --- Setup Onboarding State ---
+  const [showSetupOnboarding, setShowSetupOnboarding] = useState(false);
+  const [setupStep, setSetupStep] = useState<'welcome' | 'sync' | 'ai'>('welcome');
+  const [tempGithubPat, setTempGithubPat] = useState('');
+  const [tempOpenaiApiKey, setTempOpenaiApiKey] = useState('');
+  const [tempGistId, setTempGistId] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Native dialog refs
@@ -314,9 +328,25 @@ export default function App() {
     setCurrentWeek(week);
 
     const savedSettings = localStorage.getItem('antigravity_planner_settings');
+    const setupCompleted = localStorage.getItem('focus_boundary_setup_completed') === 'true';
     let loadedSettings: AppSettings = DEFAULT_SETTINGS;
+    let hasKeys = false;
     if (savedSettings) {
-      try { loadedSettings = JSON.parse(savedSettings); setSettings(loadedSettings); } catch (e) { console.error('Error loading settings', e); }
+      try { 
+        loadedSettings = JSON.parse(savedSettings); 
+        setSettings(loadedSettings); 
+        if (loadedSettings.githubPat || loadedSettings.openaiApiKey) {
+          hasKeys = true;
+        }
+      } catch (e) { 
+        console.error('Error loading settings', e); 
+      }
+    }
+
+    if (!hasKeys && !setupCompleted) {
+      setShowSetupOnboarding(true);
+      if (loadedSettings.githubPat) setTempGithubPat(loadedSettings.githubPat);
+      if (loadedSettings.openaiApiKey) setTempOpenaiApiKey(loadedSettings.openaiApiKey);
     }
 
     let loadedTasks: Task[] = [];
@@ -346,10 +376,12 @@ export default function App() {
       .then(suggestion => setTodaySuggestion(suggestion))
       .catch(() => {});
 
-    // Auto-focus quick-add input on startup
-    setTimeout(() => {
-      quickCaptureInputRef.current?.focus();
-    }, 50);
+    // Auto-focus quick-add input on startup if setup completed
+    if (hasKeys || setupCompleted) {
+      setTimeout(() => {
+        quickCaptureInputRef.current?.focus();
+      }, 50);
+    }
   }, []);
 
   // --- PWA Install Prompt & iOS Support ---
@@ -460,29 +492,30 @@ export default function App() {
   };
 
 
-  const triggerGistSyncPull = async () => {
-    if (!settings.githubPat) return;
+  const triggerGistSyncPull = async (customSettings?: AppSettings) => {
+    const activeSettings = customSettings || settings;
+    if (!activeSettings.githubPat) return;
     setSyncStatus('syncing');
     try {
-      let activeGistId = settings.gistId;
+      let activeGistId = activeSettings.gistId;
       if (!activeGistId) {
-        const foundId = await findExistingGist(settings.githubPat);
+        const foundId = await findExistingGist(activeSettings.githubPat);
         if (foundId) {
           activeGistId = foundId;
-          const updatedSettings = { ...settings, gistId: foundId };
+          const updatedSettings = { ...activeSettings, gistId: foundId };
           setSettings(updatedSettings);
           localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
         } else {
-          const newId = await createPrivateGist(settings.githubPat, tasks, people);
+          const newId = await createPrivateGist(activeSettings.githubPat, tasks, people);
           activeGistId = newId;
-          const updatedSettings = { ...settings, gistId: newId };
+          const updatedSettings = { ...activeSettings, gistId: newId };
           setSettings(updatedSettings);
           localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
         }
       }
 
       if (activeGistId) {
-        const fetched = await fetchTasksFromGist(settings.githubPat, activeGistId);
+        const fetched = await fetchTasksFromGist(activeSettings.githubPat, activeGistId);
         if (fetched) {
           setTasks(fetched.tasks);
           setPeople(fetched.people);
@@ -496,11 +529,12 @@ export default function App() {
     }
   };
 
-  const triggerGistSyncPush = async (tasksToPush: Task[], peopleToPush: Person[]) => {
-    if (!settings.githubPat || !settings.gistId) return;
+  const triggerGistSyncPush = async (tasksToPush: Task[], peopleToPush: Person[], customSettings?: AppSettings) => {
+    const activeSettings = customSettings || settings;
+    if (!activeSettings.githubPat || !activeSettings.gistId) return;
     setSyncStatus('syncing');
     try {
-      await saveTasksToGist(settings.githubPat, settings.gistId, tasksToPush, peopleToPush);
+      await saveTasksToGist(activeSettings.githubPat, activeSettings.gistId, tasksToPush, peopleToPush);
       setSyncStatus('synced');
     } catch {
       setSyncStatus('error');
@@ -702,6 +736,89 @@ export default function App() {
     });
 
     addToast(`✓ Moved to ${targetDomain === 'work' ? '💼 Work' : '🏠 Personal'}`);
+  };
+
+  // --- Onboarding Setup Handlers ---
+  const handleValidateGithubPat = async () => {
+    const pat = tempGithubPat.trim();
+    if (!pat) {
+      setSetupError('Please enter a GitHub personal access token.');
+      return;
+    }
+
+    setIsValidating(true);
+    setSetupError(null);
+
+    try {
+      const existingGistId = await findExistingGist(pat);
+      if (existingGistId) {
+        setTempGistId(existingGistId);
+        addToast('✓ Found existing private Gist database.');
+        try {
+          const { tasks: pulledTasks, people: pulledPeople } = await fetchTasksFromGist(pat, existingGistId);
+          if (pulledTasks.length > 0) {
+            setTasks(pulledTasks);
+            localStorage.setItem('antigravity_planner_tasks', JSON.stringify(pulledTasks));
+          }
+          if (pulledPeople.length > 0) {
+            setPeople(pulledPeople);
+            localStorage.setItem('antigravity_planner_people', JSON.stringify(pulledPeople));
+          }
+          addToast('✓ Pulled existing planner data.');
+        } catch (e) {
+          console.error('Failed to pull tasks from existing Gist', e);
+        }
+      } else {
+        const newGistId = await createPrivateGist(pat, tasks, people);
+        setTempGistId(newGistId);
+        addToast('✓ Created new private Gist database.');
+      }
+      setSetupStep('ai');
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Validation failed. Check your token and Gist scopes.';
+      setSetupError(msg);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleCompleteSetup = () => {
+    const pat = tempGithubPat.trim();
+    const apiKey = tempOpenaiApiKey.trim();
+
+    const nextSettings: AppSettings = {
+      ...settings,
+      githubPat: pat,
+      gistId: tempGistId,
+      openaiApiKey: apiKey,
+    };
+
+    setSettings(nextSettings);
+    localStorage.setItem('antigravity_planner_settings', JSON.stringify(nextSettings));
+    localStorage.setItem('focus_boundary_setup_completed', 'true');
+    setShowSetupOnboarding(false);
+    addToast('✓ Setup complete! Welcome to FocusBoundary.');
+
+    if (pat && tempGistId) {
+      triggerGistSyncPull(nextSettings);
+    }
+
+    // Auto-focus quick-add input to pop up the keyboard
+    setTimeout(() => {
+      quickCaptureInputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleSkipOnboarding = () => {
+    localStorage.setItem('focus_boundary_setup_completed', 'true');
+    setShowSetupOnboarding(false);
+    addToast('ℹ Demo Mode activated (saves locally only).');
+
+    // Auto-focus quick-add input to pop up the keyboard
+    setTimeout(() => {
+      quickCaptureInputRef.current?.focus();
+    }, 100);
   };
 
   // --- Drag and Drop Handlers ---
@@ -2085,6 +2202,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               }}
               placeholder='✏️ Add a task — AI will size and schedule it in the background'
               ref={quickCaptureInputRef}
+              autoFocus={true}
               value={quickTaskTitle}
               onChange={e => setQuickTaskTitle(e.target.value)}
             />
@@ -2732,6 +2850,242 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           >
             Undo
           </button>
+        </div>
+      )}
+
+      {/* Setup Onboarding Overlay */}
+      {showSetupOnboarding && (
+        <div className="onboarding-setup-overlay">
+          <div className="onboarding-setup-card glass-elevated">
+            {/* Header / Brand */}
+            <div className="onboarding-header">
+              <span className="onboarding-brand">
+                <Brain size={20} style={{ color: 'var(--accent-purple)' }} /> FocusBoundary
+              </span>
+              <div className="setup-pagination-dots">
+                <span className={`dot ${setupStep === 'welcome' ? 'active' : ''}`} />
+                <span className={`dot ${setupStep === 'sync' ? 'active' : ''}`} />
+                <span className={`dot ${setupStep === 'ai' ? 'active' : ''}`} />
+              </div>
+            </div>
+
+            {/* Step Content */}
+            {setupStep === 'welcome' && (
+              <div className="setup-step-content animate-fade-in">
+                <h2 className="setup-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Shield size={22} className="icon-blue" style={{ flexShrink: 0 }} /> Protect Your Focus Boundary
+                </h2>
+                <p className="setup-subtitle">FocusBoundary is a calm, personal daily capacity planner designed to prevent burnout.</p>
+
+                <div className="onboarding-guide-box">
+                  <h3 className="guide-box-title">Core Principles</h3>
+                  <ul className="guide-box-list">
+                    <li>
+                      <strong>Size with Story Points:</strong> Size your tasks from 1 to 8 based on effort rather than strict hours.
+                    </li>
+                    <li>
+                      <strong>Respect Your Limits:</strong> A weekly capacity limit guards your focus and flags overcommitment.
+                    </li>
+                    <li>
+                      <strong>AI Capacity Assistant:</strong> A friendly client-side coach helps negotiate task overloads.
+                    </li>
+                    <li>
+                      <strong>100% Client-Side & Private:</strong> Your tokens and keys never leave your browser.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="setup-actions">
+                  <button 
+                    type="button" 
+                    className="btn-primary btn-large"
+                    onClick={() => setSetupStep('sync')}
+                  >
+                    Set Up Sync & AI <ArrowRight size={16} />
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn-link"
+                    onClick={handleSkipOnboarding}
+                  >
+                    Or run in local-only demo mode
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {setupStep === 'sync' && (
+              <div className="setup-step-content animate-fade-in">
+                <h2 className="setup-title">Secure Device Sync</h2>
+                <p className="setup-subtitle">Sync your tasks across your phone and computer using a private GitHub Gist as your database.</p>
+
+                <div className="onboarding-guide-box">
+                  <div className="guide-box-row">
+                    <Globe size={18} className="icon-blue" style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>GitHub Personal Access Token (PAT)</strong>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        Allows FocusBoundary to read and write your planner data securely. Stored only in this browser.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label htmlFor="setup-github-pat" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                    <Lock size={14} /> Enter GitHub PAT
+                  </label>
+                  <input 
+                    id="setup-github-pat"
+                    type="password" 
+                    className="form-control" 
+                    value={tempGithubPat}
+                    onChange={e => {
+                      setTempGithubPat(e.target.value);
+                      setSetupError(null);
+                    }}
+                    placeholder="ghp_..."
+                  />
+                  
+                  <details style={{ marginTop: '0.4rem', fontSize: '0.78rem' }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                      How to generate a token in 30 seconds:
+                    </summary>
+                    <ol style={{ paddingLeft: '1.2rem', marginTop: '0.3rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', color: 'var(--text-secondary)' }}>
+                      <li>Login to <strong>GitHub.com</strong>.</li>
+                      <li>Go to <strong>Settings</strong> &gt; <strong>Developer settings</strong> &gt; <strong>Tokens (classic)</strong>.</li>
+                      <li>Click <strong>Generate new token (classic)</strong>.</li>
+                      <li>Select the <strong>gist</strong> checkbox scope.</li>
+                      <li>Generate the token, copy it, and paste it here.</li>
+                    </ol>
+                  </details>
+                </div>
+
+                {setupError && (
+                  <div className="sticky-warning" style={{ marginTop: '0.8rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.78rem' }}>{setupError}</span>
+                  </div>
+                )}
+
+                {tempGistId && (
+                  <div className="setup-success-badge" style={{ marginTop: '0.8rem' }}>
+                    <Check size={16} />
+                    <span>Connected! Database ID: <code>{tempGistId.substring(0, 8)}...</code></span>
+                  </div>
+                )}
+
+                <div className="setup-actions">
+                  {!tempGistId ? (
+                    <button 
+                      type="button" 
+                      className="btn-primary btn-large"
+                      disabled={isValidating || !tempGithubPat.trim()}
+                      onClick={handleValidateGithubPat}
+                    >
+                      {isValidating ? (
+                        <>
+                          <span className="spinner" /> Validating Token...
+                        </>
+                      ) : (
+                        <>
+                          Connect GitHub Token <Check size={16} />
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button 
+                      type="button" 
+                      className="btn-primary btn-large"
+                      onClick={() => setSetupStep('ai')}
+                    >
+                      Continue to AI Coach <ArrowRight size={16} />
+                    </button>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '0.5rem' }}>
+                    <button 
+                      type="button" 
+                      className="btn-secondary"
+                      onClick={() => setSetupStep('welcome')}
+                    >
+                      <ArrowLeft size={14} /> Back
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn-link"
+                      onClick={handleSkipOnboarding}
+                    >
+                      Skip to Local Demo Mode
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {setupStep === 'ai' && (
+              <div className="setup-step-content animate-fade-in">
+                <h2 className="setup-title">Enable AI Capacity Assistant</h2>
+                <p className="setup-subtitle">Activate your client-side coach to negotiate task point sizes and auto-triage schedule overloads.</p>
+
+                <div className="onboarding-guide-box">
+                  <div className="guide-box-row">
+                    <Key size={18} className="icon-purple" style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>OpenAI API Key</strong>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        Powers the Capacity Negotiator assistant in the sidebar. Your key is stored locally and sent directly to OpenAI.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '0.5rem' }}>
+                  <label htmlFor="setup-openai-key" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                    <Lock size={14} /> Enter OpenAI API Key (Optional)
+                  </label>
+                  <input 
+                    id="setup-openai-key"
+                    type="password" 
+                    className="form-control" 
+                    value={tempOpenaiApiKey}
+                    onChange={e => setTempOpenaiApiKey(e.target.value)}
+                    placeholder="sk-..."
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Leave blank to skip and set up later in Settings.
+                  </span>
+                </div>
+
+                <div className="setup-actions">
+                  <button 
+                    type="button" 
+                    className="btn-primary btn-large"
+                    onClick={handleCompleteSetup}
+                  >
+                    Finish Setup & Start Planning <Check size={16} />
+                  </button>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '0.5rem' }}>
+                    <button 
+                      type="button" 
+                      className="btn-secondary"
+                      onClick={() => setSetupStep('sync')}
+                    >
+                      <ArrowLeft size={14} /> Back
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn-link"
+                      onClick={handleSkipOnboarding}
+                    >
+                      Skip to Local Demo Mode
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
