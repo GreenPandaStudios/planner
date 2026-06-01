@@ -258,3 +258,131 @@ export async function getTodaySuggestion(
     return todayTasks[0].title;
   }
 }
+
+// ---- Subtask Breakdown ----
+
+export interface SubtaskSpec {
+  title: string;
+  points: 1 | 2 | 3 | 5 | 8;
+  weekOffset: number; // relative to current week
+  day: Weekday;
+}
+
+/** Decide if a raw task title warrants automatic breakdown.
+ *  Breakdown if it sounds like a multi-week project (deadline hint ≥ 2 weeks out,
+ *  or contains project-level keywords, or the triage placed it 2+ weeks out). */
+export function shouldBreakDown(rawTitle: string, weekOffset: number): boolean {
+  const lower = rawTitle.toLowerCase();
+  if (weekOffset >= 2) return true;
+  if (/\b(project|epic|launch|build|create|write|develop|design|research|report|plan|prepare|implement|migrate|overhaul|campaign|proposal|presentation|thesis|dissertation)\b/.test(lower)) return true;
+  if (/\b(this month|next month|by end of|end of quarter|q[1-4]|semester|sprint)\b/.test(lower)) return true;
+  return false;
+}
+
+/** Local heuristic breakdown — used when no API key. */
+function breakDownLocally(parentTitle: string, weekOffset: number): SubtaskSpec[] {
+  const today = new Date().getDay();
+  const todayIdx = Math.min(Math.max(today - 1, 0), 4);
+  const days: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+  // Simple 3-step pattern: research → draft/build → review
+  const phases = [
+    { suffix: '— research & plan', points: 1 as const, relativeWeek: 0, dayIdx: Math.min(todayIdx + 1, 4) },
+    { suffix: '— draft / build',   points: 3 as const, relativeWeek: Math.max(1, Math.floor(weekOffset / 2)), dayIdx: 1 },
+    { suffix: '— review & finish', points: 2 as const, relativeWeek: Math.max(weekOffset - 1, 1),             dayIdx: 3 },
+  ];
+
+  const shortName = parentTitle.length > 30 ? parentTitle.substring(0, 28) + '…' : parentTitle;
+
+  return phases.map(p => ({
+    title: `${shortName} ${p.suffix}`,
+    points: p.points,
+    weekOffset: p.relativeWeek,
+    day: days[p.dayIdx],
+  }));
+}
+
+/** AI-powered subtask breakdown. Returns null if API call fails (caller falls back to local). */
+export async function breakIntoSubtasks(
+  parentTitle: string,
+  weekOffset: number,
+  currentWeek: string,
+  apiKey: string,
+): Promise<(SubtaskSpec & { week: string })[] | null> {
+  const prompt = `You are a project planning assistant. A user has a goal that is ${weekOffset} week(s) away. 
+Break it into 3–5 concrete, actionable subtasks spread across the available weeks, starting THIS week.
+
+Rules:
+1. First subtask = this week (weekOffset: 0) — something small like research/kickoff (1pt)
+2. Middle subtask(s) = main work, spread across the middle weeks
+3. Last subtask = review/polish/submit, 1 week before deadline (weekOffset: ${Math.max(weekOffset - 1, 1)})
+4. Points: 1=quick(<30m), 2=minor(1-2h), 3=focus block, 5=full day
+5. Each subtask title should be specific and actionable — NOT generic like "work on X"
+6. Day: spread across weekdays sensibly, never put heavy work on Friday
+7. Keep each title under 50 chars
+8. Generate exactly 3–5 subtasks
+
+Respond with ONLY valid JSON:
+{
+  "subtasks": [
+    { "title": "...", "points": 1|2|3|5, "weekOffset": 0, "day": "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday" }
+  ]
+}
+
+Parent goal: "${parentTitle}"`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const parsed = JSON.parse(data.choices[0].message.content);
+    const rawSubtasks: any[] = parsed.subtasks || [];
+
+    const validDays: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const validPoints = [1, 2, 3, 5, 8];
+
+    return rawSubtasks.slice(0, 5).map(s => {
+      const offset = typeof s.weekOffset === 'number' ? Math.max(0, s.weekOffset) : 0;
+      return {
+        title: String(s.title || 'Subtask').substring(0, 60),
+        points: (validPoints.includes(s.points) ? s.points : 2) as 1 | 2 | 3 | 5 | 8,
+        weekOffset: offset,
+        day: validDays.includes(s.day) ? s.day : 'Monday',
+        week: offset === 0 ? currentWeek : getOffsetWeekFromNow(offset),
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Entry point: returns subtasks with resolved week strings. */
+export async function expandToSubtasks(
+  parentTitle: string,
+  weekOffset: number,
+  currentWeek: string,
+  apiKey: string,
+): Promise<(SubtaskSpec & { week: string })[]> {
+  if (apiKey) {
+    const aiResult = await breakIntoSubtasks(parentTitle, weekOffset, currentWeek, apiKey);
+    if (aiResult && aiResult.length > 0) return aiResult;
+  }
+  // Local fallback
+  return breakDownLocally(parentTitle, weekOffset).map(s => ({
+    ...s,
+    week: s.weekOffset === 0 ? currentWeek : getOffsetWeekFromNow(s.weekOffset),
+  }));
+}

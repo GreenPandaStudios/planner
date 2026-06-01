@@ -23,7 +23,8 @@ import {
 } from './utils/github-sync';
 import { runAgentStep } from './agent/agent-engine';
 import type { AgentMessage, AgentContext } from './agent/agent-engine';
-import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion } from './agent/triage-engine';
+import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion, shouldBreakDown, expandToSubtasks } from './agent/triage-engine';
+import FocusMode from './components/FocusMode';
 import './App.css';
 
 // --- Week Helper Utilities ---
@@ -228,6 +229,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     const saved = localStorage.getItem('antigravity_planner_show_onboarding');
     return saved !== null ? JSON.parse(saved) : true;
@@ -275,6 +277,8 @@ export default function App() {
   // --- Today's focus suggestion ---
   const [todaySuggestion, setTodaySuggestion] = useState<string | null>(null);
   const [isTriaging, setIsTriaging] = useState(false);
+  // --- Focus Mode ---
+  const [focusTask, setFocusTask] = useState<Task | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   
@@ -314,14 +318,32 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // --- PWA Install Prompt ---
+  // --- PWA Install Prompt & iOS Support ---
   useEffect(() => {
     // Don't show if already installed (running in standalone)
     if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+    // Detect iOS
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(ios);
+
+    if (ios) {
+      const dismissed = localStorage.getItem('pwa_install_dismissed') === 'true';
+      if (!dismissed) {
+        const timer = setTimeout(() => {
+          setShowInstallBanner(true);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+
     const handler = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
-      setShowInstallBanner(true);
+      const dismissed = localStorage.getItem('pwa_install_dismissed') === 'true';
+      if (!dismissed) {
+        setShowInstallBanner(true);
+      }
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
@@ -334,7 +356,13 @@ export default function App() {
     if (outcome === 'accepted') {
       setShowInstallBanner(false);
       setInstallPrompt(null);
+      localStorage.setItem('pwa_install_dismissed', 'true');
     }
+  };
+
+  const dismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem('pwa_install_dismissed', 'true');
   };
 
   // --- Dialog controls ---
@@ -505,9 +533,37 @@ export default function App() {
     let triage = await triageWithAI(raw, currentWeek, settings, tasks);
     if (!triage) triage = triageLocally(raw, currentWeek) as any;
 
-    const parsedMeta = parseTaskMetadataLocally(triage!.title);
+    const weekOffset: number = (triage as any).weekOffset ?? 0;
 
-    // Parse requester from raw title
+    // --- Subtask breakdown: if this looks like a multi-week project ---
+    if (shouldBreakDown(raw, weekOffset)) {
+      const parentTitle = triage!.title;
+      const subtasks = await expandToSubtasks(parentTitle, weekOffset, currentWeek, settings.openaiApiKey);
+
+      const newSubtasks: Task[] = subtasks.map(s => ({
+        id: Math.random().toString(36).substring(2, 9),
+        title: s.title,
+        points: s.points,
+        week: s.week,
+        day: s.day,
+        status: 'todo' as const,
+        createdAt: Date.now(),
+        requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
+        parentProject: parentTitle,
+        metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: 'work', sentiment: 'neutral' },
+      }));
+
+      let updatedTasks = [...tasks, ...newSubtasks];
+      setTasks(updatedTasks);
+      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
+      setIsTriaging(false);
+      addToast(`🔗 "${parentTitle}" → ${newSubtasks.length} subtasks across ${new Set(newSubtasks.map(s => s.week)).size} weeks`);
+      if (settings.githubPat && settings.gistId) triggerGistSyncPush(updatedTasks, people);
+      return;
+    }
+
+    // --- Single task flow ---
+    const parsedMeta = parseTaskMetadataLocally(triage!.title);
     const requesterMatch = raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
     const assignedRequester = requesterMatch?.[1];
 
@@ -1015,6 +1071,30 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
     });
   }
 
+  if (focusTask) {
+    return (
+      <FocusMode
+        task={focusTask}
+        onDone={(taskId) => {
+          const updated = tasks.map(t => {
+            if (t.id === taskId) {
+              return { 
+                ...t, 
+                status: 'done' as const,
+                completedAt: Date.now()
+              };
+            }
+            return t;
+          });
+          saveTasksState(updated);
+          addToast(`✓ Focused task completed!`);
+          setFocusTask(null);
+        }}
+        onExit={() => setFocusTask(null)}
+      />
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -1152,56 +1232,46 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
       {/* PWA Install Banner */}
       {showInstallBanner && (
-        <div style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 9999,
-          background: '#fdfcf7',
-          borderTop: '2px solid var(--border-color)',
-          padding: '1rem 1.2rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.8rem',
-          boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
-        }}>
-          <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>🧠</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Add to Home Screen</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Install FocusBoundary for offline access</div>
+        <div className="pwa-install-popup">
+          <div className="pwa-install-header">
+            <span className="pwa-install-icon">🧠</span>
+            <div className="pwa-install-title">Add to Home Screen</div>
           </div>
-          <button
-            onClick={handleInstall}
-            style={{
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.6rem 1rem',
-              fontFamily: 'var(--font-sans)',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              minHeight: '44px',
-            }}
-          >Install</button>
-          <button
-            onClick={() => setShowInstallBanner(false)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: '0.4rem',
-              fontSize: '1.1rem',
-              lineHeight: 1,
-              minWidth: '32px',
-              minHeight: '44px',
-            }}
-            aria-label="Dismiss"
-          >✕</button>
+          
+          <div className="pwa-install-desc">
+            {isIOS ? (
+              <span>
+                Tap the share button
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 0.3rem', color: 'var(--accent-primary)' }}>
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                  <polyline points="16 6 12 2 8 6" />
+                  <line x1="12" y1="2" x2="12" y2="15" />
+                </svg>
+                and select <strong>"Add to Home Screen"</strong> to install FocusBoundary on your device.
+              </span>
+            ) : (
+              "Install FocusBoundary on your device for offline access and capacity coaching."
+            )}
+          </div>
+
+          <div className="pwa-install-actions">
+            <button
+              onClick={dismissInstallBanner}
+              className="btn-secondary"
+              style={{ padding: '0.4rem 0.8rem', minHeight: '36px', fontSize: '0.8rem' }}
+            >
+              {isIOS ? 'Close' : 'Not now'}
+            </button>
+            {!isIOS && (
+              <button
+                onClick={handleInstall}
+                className="btn-primary"
+                style={{ padding: '0.4rem 1rem', minHeight: '36px', fontSize: '0.8rem' }}
+              >
+                Install
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -1388,6 +1458,25 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                         key={task.id} 
                         className={`task-card ${task.status === 'done' ? 'completed' : ''}`}
                       >
+                        {task.parentProject && (
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: 'var(--accent-primary)',
+                            background: 'rgba(29, 78, 216, 0.05)',
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '3px',
+                            marginBottom: '0.35rem', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '0.2rem',
+                            fontWeight: 600,
+                            width: 'fit-content',
+                            fontFamily: 'var(--font-sans)',
+                          }}>
+                            <span>🔗</span>
+                            <span>{task.parentProject}</span>
+                          </div>
+                        )}
                         <div className="task-card-header">
                           <label className="task-checkbox-container">
                             <input 
@@ -1434,14 +1523,37 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                           })}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
-                          {task.requestedBy ? (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
-                              <User size={11} /> for {task.requestedBy}
-                            </span>
-                          ) : (
-                            <span />
-                          )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            {task.points >= 3 && task.status !== 'done' && (
+                              <button
+                                className="focus-btn"
+                                onClick={() => setFocusTask(task)}
+                                style={{
+                                  background: 'rgba(29, 78, 216, 0.08)',
+                                  color: 'var(--accent-primary)',
+                                  border: 'none',
+                                  borderRadius: 'var(--radius-sm)',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  minHeight: '36px',
+                                  transition: 'background 0.2s',
+                                }}
+                              >
+                                ▶ Focus
+                              </button>
+                            )}
+                            {task.requestedBy && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
+                                <User size={11} /> for {task.requestedBy}
+                              </span>
+                            )}
+                          </div>
                           <button 
                             className="task-action-btn delete-btn" 
                             onClick={() => handleDeleteTask(task.id)}

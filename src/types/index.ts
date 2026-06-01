@@ -28,6 +28,7 @@ export interface Task {
   completedAt?: number;
   requestedBy?: string; // Links to Person.name
   metadata?: TaskMetadata;
+  parentProject?: string; // Name of the parent task this was broken from
 }
 
 export interface AppSettings {
