@@ -2176,25 +2176,32 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         {/* Capacity Negotiator Sidebar Drawer */}
         {isNegotiating && pendingTaskAction && (
           <aside className="agent-sidebar-drawer glass-elevated">
-            <div className="agent-negotiator-container">
-              
-              {/* Left strip metrics */}
-              <div className="agent-audit-sidebar">
-                <div className="audit-banner">
-                  <Brain size={16} style={{ marginBottom: '0.1rem' }} />
-                  <span>AUDIT</span>
+            
+            {/* Top Audit Banner */}
+            <div className="agent-audit-header">
+              <div className="audit-header-top">
+                <div className="agent-avatar">CA</div>
+                <div style={{ flexGrow: 1 }}>
+                  <div className="agent-chat-title">Capacity Assistant</div>
+                  <div className="agent-chat-subtitle">Focus & Capacity Guardian</div>
                 </div>
+                <button 
+                  type="button"
+                  className="btn-abort-text"
+                  onClick={handleCancelNegotiation}
+                  title="Abort & Drop proposed task"
+                >
+                  <Ban size={11} style={{ marginRight: '0.2rem' }} /> Abort
+                </button>
+              </div>
 
-                <div className="audit-metric-group">
-                  <span className="audit-metric-label">
-                    WEEK {pendingTaskAction.task.week.replace(/^.*-W/, '')}
-                  </span>
-                  <span style={{ fontWeight: 'bold', fontSize: '0.9rem', fontFamily: 'var(--font-mono)', color: 'var(--color-danger)' }}>
-                    {getWeekPoints(pendingTaskAction.task.week)}/{settings.weeklyPointsLimit}
-                  </span>
-                  <div className="audit-metric-bar-container">
+              <div className="audit-header-stats">
+                <div className="audit-stat-item">
+                  <span className="audit-stat-label">Week {pendingTaskAction.task.week.replace(/^.*-W/, '')} Load</span>
+                  <span className="audit-stat-value">{getWeekPoints(pendingTaskAction.task.week)}/{settings.weeklyPointsLimit} pts</span>
+                  <div className="audit-progress-bar">
                     <div 
-                      className="audit-metric-bar-fill" 
+                      className="audit-progress-fill" 
                       style={{ 
                         width: `${Math.min((getWeekPoints(pendingTaskAction.task.week) / settings.weeklyPointsLimit) * 100, 100)}%`,
                         backgroundColor: getWeekPoints(pendingTaskAction.task.week) > settings.weeklyPointsLimit ? 'var(--color-danger)' : 'var(--accent-purple)'
@@ -2203,87 +2210,67 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   </div>
                 </div>
 
-                <div className="audit-task-card">
-                  <div className="audit-task-header">
-                    <span className="audit-task-title" style={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                <div className="audit-proposed-item">
+                  <span className="audit-stat-label">Proposed Task</span>
+                  <div className="audit-proposed-details">
+                    <span className="audit-proposed-title" title={pendingTaskAction.task.title}>
                       {pendingTaskAction.task.title}
                     </span>
-                    <span className="audit-task-meta" style={{ fontSize: '0.6rem', fontWeight: 700, marginTop: '0.2rem' }}>
-                      +{pendingTaskAction.task.points} pts
-                    </span>
+                    <span className="audit-proposed-points">+{pendingTaskAction.task.points} pts</span>
                   </div>
                 </div>
+              </div>
+            </div>
 
+            {/* Conversational Chat Panel */}
+            <div className="agent-chat-panel">
+              <div className="chat-message-list">
+                {agentMessages.map(msg => (
+                  <div 
+                    key={msg.id} 
+                    className={`chat-bubble ${msg.sender === 'agent' ? 'agent' : 'user'} ${msg.text.startsWith('⚙️') ? 'tool-status' : ''}`}
+                    dangerouslySetInnerHTML={{ 
+                      __html: msg.text
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/\n/g, '<br />')
+                        .replace(/^- (.*?)$/gm, '• $1')
+                    }}
+                  />
+                ))}
+
+                {isAgentTyping && (
+                  <div className="chat-bubble agent" style={{ padding: '0.3rem 0.6rem' }}>
+                    <div className="typing-indicator">
+                      <div className="typing-dot" />
+                      <div className="typing-dot" />
+                      <div className="typing-dot" />
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="chat-input-bar">
+                <input 
+                  type="text" 
+                  className="chat-input"
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendAgentMessage()}
+                  placeholder="Propose a compromise..."
+                  disabled={isAgentTyping}
+                  autoFocus
+                />
                 <button 
                   type="button"
-                  className="btn-abort"
-                  onClick={handleCancelNegotiation}
-                  title="Abort & Drop proposed task"
-                  style={{ cursor: 'pointer' }}
+                  className="chat-send-btn" 
+                  onClick={handleSendAgentMessage}
+                  disabled={isAgentTyping || !chatInput.trim()}
                 >
-                  <Ban size={11} style={{ marginRight: '0.2rem' }} /> Abort
+                  <Send size={14} />
                 </button>
               </div>
-
-              {/* Right Side Chat */}
-              <div className="agent-chat-panel">
-                <header className="agent-chat-header">
-                  <div className="agent-avatar">CA</div>
-                  <div>
-                    <div className="agent-chat-title">Capacity Assistant</div>
-                    <div className="agent-chat-subtitle">Focus & Capacity Guardian</div>
-                  </div>
-                </header>
-
-                <div className="chat-message-list">
-                  {agentMessages.map(msg => (
-                    <div 
-                      key={msg.id} 
-                      className={`chat-bubble ${msg.sender === 'agent' ? 'agent' : 'user'} ${msg.text.startsWith('⚙️') ? 'tool-status' : ''}`}
-                      dangerouslySetInnerHTML={{ 
-                        __html: msg.text
-                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                          .replace(/\n/g, '<br />')
-                          .replace(/^- (.*?)$/gm, '• $1')
-                      }}
-                    />
-                  ))}
-
-                  {isAgentTyping && (
-                    <div className="chat-bubble agent" style={{ padding: '0.3rem 0.6rem' }}>
-                      <div className="typing-indicator">
-                        <div className="typing-dot" />
-                        <div className="typing-dot" />
-                        <div className="typing-dot" />
-                      </div>
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-
-                <div className="chat-input-bar">
-                  <input 
-                    type="text" 
-                    className="chat-input"
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSendAgentMessage()}
-                    placeholder="Propose a compromise..."
-                    disabled={isAgentTyping}
-                    autoFocus
-                  />
-                  <button 
-                    type="button"
-                    className="chat-send-btn" 
-                    onClick={handleSendAgentMessage}
-                    disabled={isAgentTyping || !chatInput.trim()}
-                  >
-                    <Send size={14} />
-                  </button>
-                </div>
-              </div>
-
             </div>
           </aside>
         )}
