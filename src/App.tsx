@@ -294,6 +294,13 @@ export default function App() {
   const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
   const [dragOverSection, setDragOverSection] = useState<'today' | 'week' | 'next-week' | 'later' | null>(null);
 
+  // --- Swipe Domain Gesture State ---
+  const [swipeTaskId, setSwipeTaskId] = useState<string | null>(null);
+  const [swipeStartX, setSwipeStartX] = useState<number>(0);
+  const [swipeStartY, setSwipeStartY] = useState<number>(0);
+  const [swipeCurrentX, setSwipeCurrentX] = useState<number>(0);
+  const [isSwipingHorizontal, setIsSwipingHorizontal] = useState<boolean>(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Native dialog refs
@@ -578,6 +585,123 @@ export default function App() {
       streak,
       activeDays: uniqueDays.size
     };
+  };
+
+  // --- Swipe Domain Gesture Handlers ---
+  const handleTouchStart = (e: React.TouchEvent, taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task?.status === 'done') return;
+
+    const touch = e.touches[0];
+    setSwipeTaskId(taskId);
+    setSwipeStartX(touch.clientX);
+    setSwipeStartY(touch.clientY);
+    setSwipeCurrentX(touch.clientX);
+    setIsSwipingHorizontal(false);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swipeTaskId) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - swipeStartX;
+    const deltaY = touch.clientY - swipeStartY;
+
+    if (!isSwipingHorizontal) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+        setIsSwipingHorizontal(true);
+      } else if (Math.abs(deltaY) > 10) {
+        setSwipeTaskId(null);
+        return;
+      }
+    }
+
+    if (isSwipingHorizontal) {
+      if (e.cancelable) e.preventDefault();
+      setSwipeCurrentX(touch.clientX);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!swipeTaskId) return;
+
+    if (isSwipingHorizontal) {
+      const deltaX = swipeCurrentX - swipeStartX;
+      const swipeThreshold = 100; // swipe 100px to trigger change
+
+      if (deltaX < -swipeThreshold) {
+        handleMoveToDomain(swipeTaskId, 'work');
+      } else if (deltaX > swipeThreshold) {
+        handleMoveToDomain(swipeTaskId, 'personal');
+      }
+    }
+
+    setSwipeTaskId(null);
+    setIsSwipingHorizontal(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task?.status === 'done') return;
+
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, label, span[style*="cursor: pointer"]')) return;
+    if (e.button !== 0) return;
+
+    setSwipeTaskId(taskId);
+    setSwipeStartX(e.clientX);
+    setSwipeStartY(e.clientY);
+    setSwipeCurrentX(e.clientX);
+    setIsSwipingHorizontal(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!swipeTaskId) return;
+    const deltaX = e.clientX - swipeStartX;
+    const deltaY = e.clientY - swipeStartY;
+
+    if (!isSwipingHorizontal) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+        setIsSwipingHorizontal(true);
+      } else if (Math.abs(deltaY) > 10) {
+        setSwipeTaskId(null);
+        return;
+      }
+    }
+
+    if (isSwipingHorizontal) {
+      e.preventDefault();
+      setSwipeCurrentX(e.clientX);
+    }
+  };
+
+  const handleMouseUp = () => {
+    handleTouchEnd();
+  };
+
+  const handleMoveToDomain = (taskId: string, targetDomain: 'work' | 'personal') => {
+    setTasks(current => {
+      const nextTasks = current.map(t => {
+        if (t.id === taskId) {
+          const currentMeta = t.metadata || {};
+          return {
+            ...t,
+            metadata: {
+              ...currentMeta,
+              domain: targetDomain
+            }
+          };
+        }
+        return t;
+      });
+      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(nextTasks));
+
+      if (settings.githubPat && settings.gistId) {
+        triggerGistSyncPush(nextTasks, people);
+      }
+
+      return nextTasks;
+    });
+
+    addToast(`✓ Moved to ${targetDomain === 'work' ? '💼 Work' : '🏠 Personal'}`);
   };
 
   // --- Drag and Drop Handlers ---
@@ -1525,11 +1649,14 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               );
             }
 
+            const isSwipingThis = swipeTaskId === task.id;
+            const swipeOffset = isSwipingThis ? (swipeCurrentX - swipeStartX) : 0;
+
             return (
               <div 
                 key={task.id} 
                 className={`task-card ${task.status === 'done' ? 'completed' : ''} ${isDraggingThis ? 'dragging' : ''} ${isDragOverThis ? 'drag-over' : ''}`}
-                draggable={task.status !== 'done'}
+                draggable={task.status !== 'done' && !isSwipingHorizontal}
                 onDragStart={(e) => handleDragStart(e, task.id)}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => {
@@ -1547,14 +1674,50 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   }
                 }}
                 onDrop={(e) => handleDropOnTask(e, task.id)}
+                onTouchStart={(e) => handleTouchStart(e, task.id)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onMouseDown={(e) => handleMouseDown(e, task.id)}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
                 style={{ 
-                  cursor: task.status === 'done' ? 'default' : 'grab',
-                  opacity: isDraggingThis ? 0.4 : 1,
+                  cursor: task.status === 'done' ? 'default' : (isSwipingHorizontal && isSwipingThis ? 'ew-resize' : 'grab'),
+                  opacity: isDraggingThis ? 0.4 : (isSwipingThis ? Math.max(0.4, 1 - Math.abs(swipeOffset) / 300) : 1),
                   borderTop: isDragOverThis ? '3px solid var(--accent-primary)' : undefined,
-                  transform: isDragOverThis ? 'translateY(2px)' : undefined,
-                  transition: 'all 0.15s ease'
+                  transform: isSwipingThis && isSwipingHorizontal
+                    ? `translateX(${swipeOffset}px) rotate(${swipeOffset * 0.03}deg)`
+                    : (isDragOverThis ? 'translateY(2px)' : undefined),
+                  transition: isSwipingThis ? 'none' : 'transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease',
+                  backgroundColor: isSwipingThis && isSwipingHorizontal
+                    ? (swipeOffset < 0 ? '#f0f4ff' : '#f0fff4')
+                    : undefined,
+                  borderColor: isSwipingThis && isSwipingHorizontal
+                    ? (swipeOffset < 0 ? 'var(--accent-primary)' : 'var(--color-success)')
+                    : undefined,
+                  position: 'relative'
                 }}
               >
+                {isSwipingThis && isSwipingHorizontal && Math.abs(swipeOffset) > 20 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    [swipeOffset < 0 ? 'right' : 'left']: '12px',
+                    background: swipeOffset < 0 ? 'var(--accent-primary)' : 'var(--color-success)',
+                    color: '#fff',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    fontFamily: 'var(--font-sans)',
+                    boxShadow: 'var(--shadow-sm)',
+                    zIndex: 10,
+                    pointerEvents: 'none',
+                  }}>
+                    {swipeOffset < 0 ? '💼 Move to Work' : '🏠 Move to Personal'}
+                  </div>
+                )}
                 {task.parentProject && (
                   <div style={{ 
                     fontSize: '0.7rem', 

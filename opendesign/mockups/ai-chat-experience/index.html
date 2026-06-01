@@ -29,7 +29,7 @@
         </div>
         <div class="answer-item">
           <strong>Differentiation:</strong>
-          <span>Turned lined paper pages, hand-sketched graphite lines, non-blocking chat bubbles resembling physical sticky notes, and clean async triage skeleton cards that animate in the background.</span>
+          <span>Turned lined paper pages, hand-sketched graphite lines, non-blocking chat bubbles resembling physical sticky notes, card-swipe domain triggers, and clean async triage skeleton cards that animate in the background.</span>
         </div>
       </div>
     </header>
@@ -84,7 +84,7 @@
           <div class="horizon-column">
             <div class="horizon-header">
               <span>☀️ Focus Today</span>
-              <span class="points-badge">4 / 7 pts</span>
+              <span class="points-badge">6 / 7 pts</span>
             </div>
             
             <!-- Standard Task Card -->
@@ -96,6 +96,21 @@
               </div>
               <div class="card-meta">
                 <span><i class="fa-solid fa-user"></i> for Sarah</span>
+              </div>
+            </div>
+
+            <!-- CARD SWIPING RIGHT (TO PERSONAL) MOCKUP -->
+            <div class="task-card swiping-card-right">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Schedule client review presentation</span>
+                <span class="points-pill pill-2">2</span>
+              </div>
+              <div class="card-meta">
+                <span><i class="fa-solid fa-user"></i> Personal</span>
+              </div>
+              <div class="swipe-indicator-badge personal">
+                🏠 Move to Personal
               </div>
             </div>
 
@@ -183,47 +198,45 @@
 
       </main>
 
-      <!-- Right Capacity assistant Sidebar Panel (Turned Lined Notebook Page) -->
+      <!-- Right Capacity assistant Sidebar Panel (Stacked Notebook Page Drawer) -->
       <aside class="capacity-sidebar">
         <div class="sidebar-page">
           
           <!-- Turned page fold effect -->
           <div class="page-fold"></div>
           
-          <!-- Left audit bar margin -->
-          <div class="audit-strip">
-            <div class="strip-header">
-              <i class="fa-solid fa-brain"></i>
-              <span>AUDIT</span>
+          <!-- Top Audit Header Banner -->
+          <div class="agent-audit-header">
+            <div class="audit-header-top">
+              <div class="avatar">CA</div>
+              <div style="flex-grow: 1;">
+                <h3>Capacity Assistant</h3>
+                <span class="subtitle">Focus & Capacity Guardian</span>
+              </div>
+              <button class="btn-abort-text"><i class="fa-solid fa-ban"></i> Abort</button>
             </div>
-            <div class="strip-metrics">
-              <div class="metric-progress">
-                <span class="label">WEEK 22</span>
-                <span class="val">24 / 20</span>
-                <div class="bar">
-                  <div class="fill" style="width: 100%;"></div>
+
+            <div class="audit-header-stats">
+              <div class="audit-stat-item">
+                <span class="audit-stat-label">Week 22 Load</span>
+                <span class="audit-stat-value">24/20 pts</span>
+                <div class="audit-progress-bar">
+                  <div class="audit-progress-fill" style="width: 100%; background-color: var(--color-danger);"></div>
                 </div>
               </div>
-              
-              <div class="transaction-card">
-                <span class="t-badge">PROPOSED</span>
-                <div class="t-title">Deploy patches</div>
-                <div class="t-points">+5 pts</div>
+
+              <div class="audit-proposed-item">
+                <span class="audit-stat-label">Proposed Task</span>
+                <div class="audit-proposed-details">
+                  <span class="audit-proposed-title" title="Deploy main API server security patches">Deploy main API server...</span>
+                  <span class="audit-proposed-points">+5 pts</span>
+                </div>
               </div>
             </div>
-            <button class="btn-abort"><i class="fa-solid fa-ban"></i> Abort</button>
           </div>
 
-          <!-- Right conversational content panel -->
+          <!-- Conversational content panel -->
           <div class="chat-panel">
-            <header class="chat-header">
-              <div class="avatar">CA</div>
-              <div class="meta">
-                <h3>Capacity Assistant</h3>
-                <span>Focus & Capacity Guardian</span>
-              </div>
-            </header>
-
             <div class="message-area">
               
               <div class="chat-bubble agent">
