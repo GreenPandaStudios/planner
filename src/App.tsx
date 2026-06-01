@@ -207,7 +207,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   githubPat: '',
   gistId: '',
   weeklyPointsLimit: 30,
-  dailyPointsLimit: 7
+  dailyPointsLimit: 7,
+  customTriagePrompt: ''
 };
 
 export default function App() {
@@ -220,6 +221,7 @@ export default function App() {
   // --- UI States ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -498,6 +500,73 @@ export default function App() {
     return taskList
       .filter(t => t.week === currentWeek && t.today && t.status !== 'done')
       .reduce((sum, t) => sum + t.points, 0);
+  };
+
+  const getDailyCompletionHistory = () => {
+    const dailyPoints: Record<string, number> = {};
+    const todayDate = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(todayDate.getDate() - i);
+      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      dailyPoints[dateStr] = 0;
+    }
+
+    tasks.forEach(t => {
+      if (t.status === 'done' && t.completedAt) {
+        const completedDate = new Date(t.completedAt);
+        const dateStr = completedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (dateStr in dailyPoints) {
+          dailyPoints[dateStr] += t.points;
+        }
+      }
+    });
+
+    return Object.entries(dailyPoints).map(([date, pts]) => ({ date, pts }));
+  };
+
+  const getVelocityStats = () => {
+    const doneTasks = tasks.filter(t => t.status === 'done');
+    const totalPoints = doneTasks.reduce((s, t) => s + t.points, 0);
+    
+    const uniqueDays = new Set<string>();
+    doneTasks.forEach(t => {
+      if (t.completedAt) {
+        uniqueDays.add(new Date(t.completedAt).toDateString());
+      }
+    });
+    
+    const averageDaily = uniqueDays.size > 0 ? (totalPoints / uniqueDays.size).toFixed(1) : '0.0';
+    
+    let streak = 0;
+    const d = new Date();
+    while (true) {
+      const dateStr = d.toDateString();
+      const completedOnDay = doneTasks.some(t => t.completedAt && new Date(t.completedAt).toDateString() === dateStr);
+      if (completedOnDay) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+      } else {
+        if (streak === 0) {
+          d.setDate(d.getDate() - 1);
+          const completedYesterday = doneTasks.some(t => t.completedAt && new Date(t.completedAt).toDateString() === d.toDateString());
+          if (completedYesterday) {
+            streak++;
+            d.setDate(d.getDate() - 1);
+            continue;
+          }
+        }
+        break;
+      }
+    }
+
+    return {
+      totalPoints,
+      averageDaily,
+      streak,
+      activeDays: uniqueDays.size
+    };
   };
 
   // --- Drag and Drop Handlers ---
@@ -1195,6 +1264,9 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
   if (progressPercent > 90) progressBarColor = 'var(--color-danger)';
   else if (progressPercent > 70) progressBarColor = 'var(--accent-purple)';
 
+  const dailyHistory = getDailyCompletionHistory();
+  const maxPts = Math.max(...dailyHistory.map(d => d.pts), 5);
+
   // AI Dialog breakdown per person
   const pointsPerPerson: Record<string, number> = {};
   if (pendingTaskAction) {
@@ -1801,6 +1873,106 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             )}
           </div>
 
+          {/* Insights & Trends Card */}
+          <div className="capacity-card glass" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
+                📈 Daily Velocity & Insights
+              </span>
+              <button 
+                type="button"
+                className="btn-secondary" 
+                onClick={() => setIsInsightsOpen(!isInsightsOpen)}
+                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem', minHeight: '28px', width: 'auto' }}
+              >
+                {isInsightsOpen ? 'Hide Insights' : 'Show Insights'}
+              </button>
+            </div>
+
+            {isInsightsOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.8rem' }}>
+                
+                {/* Stats Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', textAlign: 'center' }}>
+                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                      {getVelocityStats().streak}🔥
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
+                  </div>
+                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                      {getVelocityStats().averageDaily}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
+                  </div>
+                  <div style={{ background: '#fdfcf7', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                      {getVelocityStats().totalPoints}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Pts</div>
+                  </div>
+                </div>
+
+                {/* Daily Velocity Chart */}
+                <div style={{ marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>
+                    Velocity (Last 7 Days)
+                  </div>
+                  
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'flex-end', 
+                    height: '110px', 
+                    borderBottom: '2px solid var(--text-primary)', 
+                    paddingBottom: '0.3rem',
+                    gap: '0.4rem'
+                  }}>
+                    {dailyHistory.map((item, idx) => {
+                      const pct = (item.pts / maxPts) * 100;
+                      return (
+                        <div key={idx} style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center', 
+                          flexGrow: 1, 
+                          height: '100%', 
+                          justifyContent: 'flex-end' 
+                        }}>
+                          {item.pts > 0 && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '0.2rem' }}>
+                              {item.pts}
+                            </span>
+                          )}
+                          <div 
+                            style={{ 
+                              width: '100%', 
+                              height: `${pct}%`, 
+                              minHeight: item.pts > 0 ? '4px' : '0px',
+                              background: item.pts > 0 
+                                ? 'repeating-linear-gradient(45deg, rgba(29, 78, 216, 0.15), rgba(29, 78, 216, 0.15) 3px, #ffffff 3px, #ffffff 6px)' 
+                                : 'transparent',
+                              border: item.pts > 0 ? '1px solid var(--border-color)' : 'none',
+                              borderBottom: 'none',
+                              borderRadius: '3px 3px 0 0',
+                              transition: 'height 0.3s ease'
+                            }} 
+                            title={`${item.pts} points on ${item.date}`}
+                          />
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                            {item.date}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+
           {/* Stacked Horizons Sections */}
           <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
             {renderTaskSectionList('Focus Today', 'today', tasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
@@ -2023,6 +2195,19 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   required
                 />
               </div>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '0.8rem' }}>
+              <label htmlFor="settings-triage-prompt">AI Triage Instructions (Triage System Prompt)</label>
+              <textarea 
+                id="settings-triage-prompt"
+                className="form-control" 
+                rows={3}
+                value={settings.customTriagePrompt || ''}
+                onChange={e => setSettings({ ...settings, customTriagePrompt: e.target.value })}
+                placeholder="e.g. Prioritize coding tasks. Health items must always go to Focus Today. Size admin tasks as 1 point."
+                style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', resize: 'vertical', minHeight: '80px' }}
+              />
             </div>
 
             <div className="form-actions">

@@ -78,6 +78,10 @@ export async function triageWithAI(
     .map(t => `- "${t.title}" (${t.points} pts, today: ${t.today ? 'yes' : 'no'})`)
     .join('\n') || '(none)';
 
+  const userInstructions = settings.customTriagePrompt
+    ? `\nAdditional user guidelines / instructions:\n${settings.customTriagePrompt}\n`
+    : '';
+
   const prompt = `You are a silent scheduling assistant. Given a task written in natural language, output a JSON object to schedule it onto a weekly planner.
 
 Current week: ${currentWeek}.
@@ -93,7 +97,7 @@ Rules:
 2. If this week is already at/near capacity, push to next week automatically.
 3. Clean up the title: remove day/week/point hints from the raw text.
 4. Size points by effort: 1=quick admin, 2=minor task, 3=focus block, 5=big project, 8=epic.
-
+${userInstructions}
 Respond with ONLY valid JSON, no commentary:
 {
   "title": "cleaned task title",

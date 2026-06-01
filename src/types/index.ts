@@ -38,6 +38,7 @@ export interface AppSettings {
   gistId: string;
   weeklyPointsLimit: number; // default: 30
   dailyPointsLimit: number; // default: 7
+  customTriagePrompt: string; // User instructions for triage/AI Coach
 }
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';

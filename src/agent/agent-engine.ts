@@ -104,6 +104,10 @@ export function buildSystemPrompt(context: AgentContext): string {
 
   const pendingMetaStr = pendingMeta ? `[Energy: ${pendingMeta.energyLevel || '?'}, Domain: ${pendingMeta.domain || '?'}, Sentiment: ${pendingMeta.sentiment || '?'}, Urgency: ${pendingMeta.urgency || '?'}]` : '[No metadata]';
 
+    const customInstructions = context.settings.customTriagePrompt
+    ? `\n---\n### USER SPECIFIC TRIAGE INSTRUCTIONS / RULES:\n${context.settings.customTriagePrompt}\n`
+    : '';
+
   return `You are the Focus Boundary Assistant, a thoughtful, objective capacity guardian.
 Your purpose is to help the user fit their schedule within their velocity limit of ${limit} points.
 
@@ -154,7 +158,7 @@ Use this combined context to autonomously audit the week and propose specific sh
 - Spot fatigue/burnout triggers. For example: "You have scheduled ${highEnergyPoints} points of high-energy tasks. This is too much focus load." or "You have ${dreadedCount} 'dreaded' tasks scheduled. Let's move some."
 - Suggest concrete trade-offs, like: "Let's postpone the 5-point report for Sarah since she already got 12 points of your time recently, or reschedule 'X' to next week."
 - Be supportive, but firm about protecting the user's velocity limit of ${limit} points.
-
+${customInstructions}
 ---
 Rules:
 - You cannot approve the addition (do not call \`approve_addition\`) until the sum of active points in the week is less than or equal to the limit (${limit}).
