@@ -1,11 +1,10 @@
-import type { Task, Weekday, AppSettings } from '../types';
-import { WEEKDAYS } from '../types';
+import type { Task, AppSettings } from '../types';
 
 export interface TriageResult {
   title: string;
   points: 1 | 2 | 3 | 5 | 8;
-  day: Weekday;
   weekOffset: number; // 0 = this week, 1 = next week, etc.
+  today?: boolean;
   reasoning?: string; // silent, never shown
 }
 
@@ -21,35 +20,13 @@ export function getOffsetWeekFromNow(offset: number): string {
 }
 
 // ---- Local heuristic fallback ----
-export function triageLocally(rawTitle: string, currentWeek: string): TriageResult {
+export function triageLocally(rawTitle: string, currentWeek: string): TriageResult & { week: string } {
   const lower = rawTitle.toLowerCase();
 
-  // Day
-  let day: Weekday = 'Monday';
-  const today = new Date().getDay(); // 0=Sun, 1=Mon...5=Fri, 6=Sat
-  const todayWeekday = WEEKDAYS[Math.min(Math.max(today - 1, 0), 4)];
-
-  const dayMap: [RegExp, Weekday][] = [
-    [/\bmon(day)?\b/, 'Monday'],
-    [/\btue(sday)?\b/, 'Tuesday'],
-    [/\bwed(nesday)?\b/, 'Wednesday'],
-    [/\bthu(rs(day)?)?\b/, 'Thursday'],
-    [/\bfri(day)?\b/, 'Friday'],
-  ];
-  let dayMatched = false;
-  for (const [re, wd] of dayMap) {
-    if (re.test(lower)) { day = wd; dayMatched = true; break; }
-  }
-  if (!dayMatched) {
-    // "today" → actual today
-    if (/\btoday\b/.test(lower)) {
-      day = todayWeekday;
-    } else if (/\btomorrow\b/.test(lower)) {
-      const tomorrowIdx = Math.min(today, 4); // clamp to Friday
-      day = WEEKDAYS[tomorrowIdx];
-    } else {
-      day = todayWeekday;
-    }
+  // Today parsing
+  let today = false;
+  if (/\btoday\b/.test(lower)) {
+    today = true;
   }
 
   // Week offset
@@ -59,7 +36,7 @@ export function triageLocally(rawTitle: string, currentWeek: string): TriageResu
   else if (/\bnext month\b/.test(lower)) weekOffset = 4;
 
   // Points
-  let points: 1 | 2 | 3 | 5 | 8 = 1;
+  let points: 1 | 2 | 3 | 5 | 8;
   const ptMatch = lower.match(/\b(1|2|3|5|8)\s*(?:pts?|points?)?\b/);
   if (ptMatch) {
     points = parseInt(ptMatch[1]) as 1 | 2 | 3 | 5 | 8;
@@ -75,7 +52,6 @@ export function triageLocally(rawTitle: string, currentWeek: string): TriageResu
 
   // Clean title
   let title = rawTitle;
-  for (const [re] of dayMap) title = title.replace(re, '');
   title = title.replace(/\b(next week|this week|this month|next month|today|tomorrow)\b/gi, '');
   title = title.replace(/\b(?:1|2|3|5|8)\s*(?:pts?|points?)\b/gi, '');
   title = title.replace(/\s+/g, ' ').trim();
@@ -84,7 +60,7 @@ export function triageLocally(rawTitle: string, currentWeek: string): TriageResu
 
   const week = weekOffset === 0 ? currentWeek : getOffsetWeekFromNow(weekOffset);
 
-  return { title, points, day, weekOffset, week } as TriageResult & { week: string };
+  return { title, points, weekOffset, today, week };
 }
 
 // ---- AI-powered triage ----
@@ -96,36 +72,33 @@ export async function triageWithAI(
 ): Promise<(TriageResult & { week: string }) | null> {
   if (!settings.openaiApiKey) return null;
 
-  const today = new Date();
-  const todayName = WEEKDAYS[Math.min(Math.max(today.getDay() - 1, 0), 4)];
-
   // Build brief context for the model
   const weekTasks = existingTasks
     .filter(t => t.week === currentWeek && t.status !== 'done')
-    .map(t => `- ${t.day}: "${t.title}" (${t.points} pts)`)
+    .map(t => `- "${t.title}" (${t.points} pts, today: ${t.today ? 'yes' : 'no'})`)
     .join('\n') || '(none)';
 
   const prompt = `You are a silent scheduling assistant. Given a task written in natural language, output a JSON object to schedule it onto a weekly planner.
 
-Today is ${todayName}. Current week: ${currentWeek}.
+Current week: ${currentWeek}.
 
 Current week's tasks:
 ${weekTasks}
 
-Capacity limit: ${settings.weeklyPointsLimit} points per week.
+Weekly capacity limit: ${settings.weeklyPointsLimit} points.
+Daily capacity limit: ${settings.dailyPointsLimit} points.
 
 Rules:
-1. Parse deadline hints like "this month", "next week", "by Friday", "ASAP" to pick weekOffset (0=this week, 1=next week, 2=two weeks out, etc.)
+1. Parse deadline hints like "this month", "next week", "today", "ASAP" to pick weekOffset (0=this week, 1=next week, 2=two weeks out, etc.) and "today" (true/false)
 2. If this week is already at/near capacity, push to next week automatically.
-3. Pick the best day that doesn't already have too many tasks.
-4. Size points by effort: 1=quick admin, 2=minor task, 3=focus block, 5=big project, 8=epic(never use this).
-5. Clean up the title: remove day/week/point hints from the raw text.
+3. Clean up the title: remove day/week/point hints from the raw text.
+4. Size points by effort: 1=quick admin, 2=minor task, 3=focus block, 5=big project, 8=epic.
 
 Respond with ONLY valid JSON, no commentary:
 {
   "title": "cleaned task title",
   "points": 1|2|3|5|8,
-  "day": "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday",
+  "today": true|false,
   "weekOffset": 0|1|2|3|4
 }
 
@@ -152,15 +125,14 @@ Task to schedule: "${rawTitle}"`;
 
     const offset = typeof parsed.weekOffset === 'number' ? parsed.weekOffset : 0;
     const week = offset === 0 ? currentWeek : getOffsetWeekFromNow(offset);
-    const validDays: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const day: Weekday = validDays.includes(parsed.day) ? parsed.day : 'Monday';
+    const today = !!parsed.today;
     const validPoints = [1, 2, 3, 5, 8];
     const points = (validPoints.includes(parsed.points) ? parsed.points : 2) as 1 | 2 | 3 | 5 | 8;
 
     return {
       title: (parsed.title || rawTitle).trim(),
       points,
-      day,
+      today,
       weekOffset: offset,
       week,
     };
@@ -170,17 +142,16 @@ Task to schedule: "${rawTitle}"`;
 }
 
 // ---- Silent overflow rebalancer ----
-// Given tasks for a week that's over capacity, returns a list of tasks to move to next week
 export async function silentRebalance(
   tasks: Task[],
   weekStr: string,
   limit: number,
   _apiKey: string,
-): Promise<{ taskId: string; toWeek: string; toDay: Weekday; label: string }[]> {
+): Promise<{ taskId: string; toWeek: string; label: string }[]> {
+  void _apiKey;
   const weekTasks = tasks
     .filter(t => t.week === weekStr && t.status !== 'done')
     .sort((a, b) => {
-      // Move lowest-priority / most flexible first
       const prioA = a.metadata?.priority === 'high' ? 2 : a.metadata?.priority === 'medium' ? 1 : 0;
       const prioB = b.metadata?.priority === 'high' ? 2 : b.metadata?.priority === 'medium' ? 1 : 0;
       return prioA - prioB;
@@ -190,14 +161,13 @@ export async function silentRebalance(
   if (total <= limit) return [];
 
   const nextWeek = getOffsetWeekFromNow(1);
-  const moves: { taskId: string; toWeek: string; toDay: Weekday; label: string }[] = [];
+  const moves: { taskId: string; toWeek: string; label: string }[] = [];
   let runningTotal = total;
 
   for (const task of weekTasks) {
     if (runningTotal <= limit) break;
-    // Skip high-priority / critical tasks
     if (task.metadata?.priority === 'high' || task.metadata?.urgency === 'critical') continue;
-    moves.push({ taskId: task.id, toWeek: nextWeek, toDay: task.day, label: task.title });
+    moves.push({ taskId: task.id, toWeek: nextWeek, label: task.title });
     runningTotal -= task.points;
   }
 
@@ -208,17 +178,15 @@ export async function silentRebalance(
 export async function getTodaySuggestion(
   tasks: Task[],
   currentWeek: string,
-  todayDay: Weekday,
   apiKey: string,
 ): Promise<string | null> {
   const todayTasks = tasks.filter(
-    t => t.week === currentWeek && t.day === todayDay && t.status !== 'done'
+    t => t.week === currentWeek && t.today && t.status !== 'done'
   );
 
   if (todayTasks.length === 0) return null;
   if (todayTasks.length === 1) return todayTasks[0].title;
 
-  // Without API key: pick highest-points task (most substantial)
   if (!apiKey) {
     const sorted = [...todayTasks].sort((a, b) => {
       const urgencyScore = (t: Task) =>
@@ -259,18 +227,53 @@ export async function getTodaySuggestion(
   }
 }
 
-// ---- Subtask Breakdown ----
+// ---- Autocomplete Auto-Fill Today Autopilot ----
+export function autoFillToday(
+  tasks: Task[],
+  currentWeek: string,
+  dailyLimit: number
+): Task[] {
+  const backlogThisWeek = tasks.filter(
+    t => t.week === currentWeek && t.status !== 'done' && !t.today
+  );
 
+  const sortedBacklog = [...backlogThisWeek].sort((a, b) => {
+    const getPrioVal = (t: Task) => t.metadata?.priority === 'high' ? 3 : t.metadata?.priority === 'medium' ? 2 : 1;
+    const prioDiff = getPrioVal(b) - getPrioVal(a);
+    if (prioDiff !== 0) return prioDiff;
+
+    const getUrgencyVal = (t: Task) => t.metadata?.urgency === 'critical' ? 2 : 1;
+    const urgencyDiff = getUrgencyVal(b) - getUrgencyVal(a);
+    if (urgencyDiff !== 0) return urgencyDiff;
+
+    return b.points - a.points; // larger tasks first
+  });
+
+  const todayTasks = tasks.filter(t => t.week === currentWeek && t.status !== 'done' && t.today);
+  let currentTodayPoints = todayTasks.reduce((s, t) => s + t.points, 0);
+
+  const updatedTasks = [...tasks];
+
+  for (const task of sortedBacklog) {
+    if (currentTodayPoints + task.points <= dailyLimit) {
+      const idx = updatedTasks.findIndex(t => t.id === task.id);
+      if (idx !== -1) {
+        updatedTasks[idx] = { ...updatedTasks[idx], today: true };
+        currentTodayPoints += task.points;
+      }
+    }
+  }
+
+  return updatedTasks;
+}
+
+// ---- Subtask Breakdown ----
 export interface SubtaskSpec {
   title: string;
   points: 1 | 2 | 3 | 5 | 8;
   weekOffset: number; // relative to current week
-  day: Weekday;
 }
 
-/** Decide if a raw task title warrants automatic breakdown.
- *  Breakdown if it sounds like a multi-week project (deadline hint ≥ 2 weeks out,
- *  or contains project-level keywords, or the triage placed it 2+ weeks out). */
 export function shouldBreakDown(rawTitle: string, weekOffset: number): boolean {
   const lower = rawTitle.toLowerCase();
   if (weekOffset >= 2) return true;
@@ -279,17 +282,11 @@ export function shouldBreakDown(rawTitle: string, weekOffset: number): boolean {
   return false;
 }
 
-/** Local heuristic breakdown — used when no API key. */
 function breakDownLocally(parentTitle: string, weekOffset: number): SubtaskSpec[] {
-  const today = new Date().getDay();
-  const todayIdx = Math.min(Math.max(today - 1, 0), 4);
-  const days: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-
-  // Simple 3-step pattern: research → draft/build → review
   const phases = [
-    { suffix: '— research & plan', points: 1 as const, relativeWeek: 0, dayIdx: Math.min(todayIdx + 1, 4) },
-    { suffix: '— draft / build',   points: 3 as const, relativeWeek: Math.max(1, Math.floor(weekOffset / 2)), dayIdx: 1 },
-    { suffix: '— review & finish', points: 2 as const, relativeWeek: Math.max(weekOffset - 1, 1),             dayIdx: 3 },
+    { suffix: '— research & plan', points: 1 as const, relativeWeek: 0 },
+    { suffix: '— draft / build',   points: 3 as const, relativeWeek: Math.max(1, Math.floor(weekOffset / 2)) },
+    { suffix: '— review & finish', points: 2 as const, relativeWeek: Math.max(weekOffset - 1, 1) },
   ];
 
   const shortName = parentTitle.length > 30 ? parentTitle.substring(0, 28) + '…' : parentTitle;
@@ -298,11 +295,9 @@ function breakDownLocally(parentTitle: string, weekOffset: number): SubtaskSpec[
     title: `${shortName} ${p.suffix}`,
     points: p.points,
     weekOffset: p.relativeWeek,
-    day: days[p.dayIdx],
   }));
 }
 
-/** AI-powered subtask breakdown. Returns null if API call fails (caller falls back to local). */
 export async function breakIntoSubtasks(
   parentTitle: string,
   weekOffset: number,
@@ -318,14 +313,13 @@ Rules:
 3. Last subtask = review/polish/submit, 1 week before deadline (weekOffset: ${Math.max(weekOffset - 1, 1)})
 4. Points: 1=quick(<30m), 2=minor(1-2h), 3=focus block, 5=full day
 5. Each subtask title should be specific and actionable — NOT generic like "work on X"
-6. Day: spread across weekdays sensibly, never put heavy work on Friday
-7. Keep each title under 50 chars
-8. Generate exactly 3–5 subtasks
+6. Keep each title under 50 chars
+7. Generate exactly 3–5 subtasks
 
 Respond with ONLY valid JSON:
 {
   "subtasks": [
-    { "title": "...", "points": 1|2|3|5, "weekOffset": 0, "day": "Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday" }
+    { "title": "...", "points": 1|2|3|5, "weekOffset": 0 }
   ]
 }
 
@@ -350,8 +344,6 @@ Parent goal: "${parentTitle}"`;
     const data = await res.json();
     const parsed = JSON.parse(data.choices[0].message.content);
     const rawSubtasks: any[] = parsed.subtasks || [];
-
-    const validDays: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const validPoints = [1, 2, 3, 5, 8];
 
     return rawSubtasks.slice(0, 5).map(s => {
@@ -360,7 +352,6 @@ Parent goal: "${parentTitle}"`;
         title: String(s.title || 'Subtask').substring(0, 60),
         points: (validPoints.includes(s.points) ? s.points : 2) as 1 | 2 | 3 | 5 | 8,
         weekOffset: offset,
-        day: validDays.includes(s.day) ? s.day : 'Monday',
         week: offset === 0 ? currentWeek : getOffsetWeekFromNow(offset),
       };
     });
@@ -369,7 +360,6 @@ Parent goal: "${parentTitle}"`;
   }
 }
 
-/** Entry point: returns subtasks with resolved week strings. */
 export async function expandToSubtasks(
   parentTitle: string,
   weekOffset: number,
@@ -380,7 +370,6 @@ export async function expandToSubtasks(
     const aiResult = await breakIntoSubtasks(parentTitle, weekOffset, currentWeek, apiKey);
     if (aiResult && aiResult.length > 0) return aiResult;
   }
-  // Local fallback
   return breakDownLocally(parentTitle, weekOffset).map(s => ({
     ...s,
     week: s.weekOffset === 0 ? currentWeek : getOffsetWeekFromNow(s.weekOffset),

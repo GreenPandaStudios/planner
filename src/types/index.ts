@@ -22,13 +22,14 @@ export interface Task {
   description?: string;
   points: 1 | 2 | 3 | 5 | 8;
   week: string; // Format: "YYYY-[W]WW" (e.g., "2026-W22")
-  day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+  day?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
   status: 'todo' | 'in-progress' | 'done';
   createdAt: number;
   completedAt?: number;
   requestedBy?: string; // Links to Person.name
   metadata?: TaskMetadata;
   parentProject?: string; // Name of the parent task this was broken from
+  today?: boolean; // Scheduled for Focus Today
 }
 
 export interface AppSettings {
@@ -36,6 +37,7 @@ export interface AppSettings {
   githubPat: string;
   gistId: string;
   weeklyPointsLimit: number; // default: 30
+  dailyPointsLimit: number; // default: 7
 }
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';

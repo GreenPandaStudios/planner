@@ -13,8 +13,7 @@ import {
   Globe,
   User
 } from 'lucide-react';
-import type { Task, AppSettings, Weekday, AgentChatMessage, Person, TaskMetadata } from './types';
-import { WEEKDAYS } from './types';
+import type { Task, AppSettings, AgentChatMessage, Person, TaskMetadata } from './types';
 import { 
   findExistingGist, 
   createPrivateGist, 
@@ -23,7 +22,7 @@ import {
 } from './utils/github-sync';
 import { runAgentStep } from './agent/agent-engine';
 import type { AgentMessage, AgentContext } from './agent/agent-engine';
-import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion, shouldBreakDown, expandToSubtasks } from './agent/triage-engine';
+import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion, shouldBreakDown, expandToSubtasks, getOffsetWeekFromNow, autoFillToday } from './agent/triage-engine';
 import FocusMode from './components/FocusMode';
 import './App.css';
 
@@ -63,11 +62,7 @@ function formatWeekRange(weekStr: string): string {
   return `${monStr} – ${friStr}`;
 }
 
-function getOffsetWeek(weekStr: string, offsetWeeks: number): string {
-  const mon = getMondayOfIsoWeek(weekStr);
-  mon.setDate(mon.getDate() + (offsetWeeks * 7));
-  return getIsoWeek(mon);
-}
+
 
 // --- Metadata Helpers ---
 const parseTaskMetadataLocally = (title: string, description?: string): TaskMetadata => {
@@ -211,7 +206,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   openaiApiKey: '',
   githubPat: '',
   gistId: '',
-  weeklyPointsLimit: 30
+  weeklyPointsLimit: 30,
+  dailyPointsLimit: 7
 };
 
 export default function App() {
@@ -248,7 +244,8 @@ export default function App() {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
   const [taskPoints, setTaskPoints] = useState<1 | 2 | 3 | 5 | 8>(1);
-  const [taskDay, setTaskDay] = useState<Weekday>('Monday');
+  const [taskToday, setTaskToday] = useState(false);
+  const [taskWeek, setTaskWeek] = useState('');
   const [taskRequestedBy, setTaskRequestedBy] = useState('');
   const [quickTaskTitle, setQuickTaskTitle] = useState('');
 
@@ -280,6 +277,11 @@ export default function App() {
   // --- Focus Mode ---
   const [focusTask, setFocusTask] = useState<Task | null>(null);
 
+  // --- Drag and Drop State ---
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<'today' | 'week' | 'next-week' | 'later' | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Native dialog refs
@@ -310,10 +312,19 @@ export default function App() {
       try { setPeople(JSON.parse(savedPeople)); } catch (e) { console.error('Error loading people', e); }
     }
 
+    // New day load check: runs autoFillToday autopilot silently
+    const todayStr = new Date().toDateString();
+    const lastOpened = localStorage.getItem('antigravity_planner_last_opened_date');
+    if (lastOpened !== todayStr) {
+      const updatedWithAutofill = autoFillToday(loadedTasks, week, loadedSettings.dailyPointsLimit || 7);
+      setTasks(updatedWithAutofill);
+      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedWithAutofill));
+      localStorage.setItem('antigravity_planner_last_opened_date', todayStr);
+      loadedTasks = updatedWithAutofill;
+    }
+
     // Compute today suggestion silently on load
-    const todayIdx = new Date().getDay();
-    const todayWeekday = WEEKDAYS[Math.min(Math.max(todayIdx - 1, 0), 4)];
-    getTodaySuggestion(loadedTasks, week, todayWeekday, loadedSettings.openaiApiKey)
+    getTodaySuggestion(loadedTasks, week, loadedSettings.openaiApiKey)
       .then(suggestion => setTodaySuggestion(suggestion))
       .catch(() => {});
   }, []);
@@ -460,7 +471,7 @@ export default function App() {
         }
         setSyncStatus('synced');
       }
-    } catch (e: any) {
+    } catch {
       setSyncStatus('error');
     }
   };
@@ -471,7 +482,7 @@ export default function App() {
     try {
       await saveTasksToGist(settings.githubPat, settings.gistId, tasksToPush, peopleToPush);
       setSyncStatus('synced');
-    } catch (e: any) {
+    } catch {
       setSyncStatus('error');
     }
   };
@@ -483,23 +494,158 @@ export default function App() {
       .reduce((sum, t) => sum + t.points, 0);
   };
 
-  const getDayPoints = (weekStr: string, day: Weekday, taskList: Task[] = tasks) => {
+  const getTodayPoints = (taskList: Task[] = tasks) => {
     return taskList
-      .filter(t => t.week === weekStr && t.day === day && t.status !== 'done')
+      .filter(t => t.week === currentWeek && t.today && t.status !== 'done')
       .reduce((sum, t) => sum + t.points, 0);
   };
 
-  // Triage state calculations
+  // --- Drag and Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTaskId(taskId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverSection(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDragEnterSection = (sectionKey: 'today' | 'week' | 'next-week' | 'later') => {
+    if (draggedTaskId) {
+      setDragOverSection(sectionKey);
+    }
+  };
+
+  const handleDropOnSection = (e: React.DragEvent, targetSection: 'today' | 'week' | 'next-week' | 'later') => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverSection(null);
+
+    if (!taskId) return;
+
+    const nextWeek = getOffsetWeekFromNow(1);
+    const laterWeek = getOffsetWeekFromNow(2);
+
+    const draggedTask = tasks.find(t => t.id === taskId);
+    if (!draggedTask) return;
+
+    const updatedTargetToday = targetSection === 'today';
+    const updatedTargetWeek = targetSection === 'today' || targetSection === 'week'
+      ? currentWeek
+      : targetSection === 'next-week'
+        ? nextWeek
+        : laterWeek;
+
+    const updatedTask = {
+      ...draggedTask,
+      today: updatedTargetToday,
+      week: updatedTargetWeek
+    };
+
+    const remaining = tasks.filter(t => t.id !== taskId);
+    const newTasks = [...remaining, updatedTask];
+
+    saveTasksState(newTasks);
+    addToast(`Moved task to ${targetSection === 'today' ? 'Today' : targetSection === 'week' ? 'This Week' : targetSection === 'next-week' ? 'Next Week' : 'Later'}`);
+  };
+
+  const handleDropOnTask = (e: React.DragEvent, targetTaskId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
+    setDragOverSection(null);
+
+    if (!draggedId || draggedId === targetTaskId) return;
+
+    const draggedTask = tasks.find(t => t.id === draggedId);
+    const targetTask = tasks.find(t => t.id === targetTaskId);
+    if (!draggedTask || !targetTask) return;
+
+    const updatedDragged = {
+      ...draggedTask,
+      today: targetTask.today,
+      week: targetTask.week
+    };
+
+    const remaining = tasks.filter(t => t.id !== draggedId);
+    const targetIdx = remaining.findIndex(t => t.id === targetTaskId);
+
+    const newTasks = [...remaining];
+    newTasks.splice(targetIdx, 0, updatedDragged);
+
+    saveTasksState(newTasks);
+    addToast(`Reordered tasks`);
+  };
+
+  // --- Today Promotion and Autopilot Handlers ---
+  const handleToggleToday = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = tasks.map(t => {
+      if (t.id === task.id) {
+        const nextToday = !t.today;
+        const nextWeek = nextToday && t.week !== currentWeek ? currentWeek : t.week;
+        return {
+          ...t,
+          today: nextToday,
+          week: nextWeek
+        };
+      }
+      return t;
+    });
+    saveTasksState(updated);
+    addToast(task.today ? `Removed from Today` : `Promoted to Today`);
+  };
+
+  const handleAutoFillToday = () => {
+    const updated = autoFillToday(tasks, currentWeek, settings.dailyPointsLimit || 7);
+    saveTasksState(updated);
+    
+    const oldTodayCount = tasks.filter(t => t.week === currentWeek && t.today && t.status !== 'done').length;
+    const newTodayCount = updated.filter(t => t.week === currentWeek && t.today && t.status !== 'done').length;
+    const diff = newTodayCount - oldTodayCount;
+    if (diff > 0) {
+      addToast(`🪄 Auto-filled ${diff} task(s) into Focus Today`);
+    } else {
+      addToast(`Focus Today is already full or no eligible tasks in backlog`);
+    }
+  };
 
   // --- Task Save & Validation ---
-  const openAddTask = (day: Weekday) => {
-    setQuickTaskTitle(` ${day}`);
-    setTimeout(() => {
-      quickCaptureInputRef.current?.focus();
-      if (quickCaptureInputRef.current) {
-        quickCaptureInputRef.current.setSelectionRange(0, 0);
-      }
-    }, 50);
+  const openAddTask = (section: 'today' | 'week' | 'next-week' | 'later') => {
+    setEditingTask(null);
+    setTaskTitle('');
+    setTaskDesc('');
+    setTaskPoints(1);
+    setTaskRequestedBy('');
+    
+    if (section === 'today') {
+      setTaskToday(true);
+      setTaskWeek(currentWeek);
+    } else if (section === 'week') {
+      setTaskToday(false);
+      setTaskWeek(currentWeek);
+    } else if (section === 'next-week') {
+      setTaskToday(false);
+      setTaskWeek(getOffsetWeekFromNow(1));
+    } else {
+      setTaskToday(false);
+      setTaskWeek(getOffsetWeekFromNow(2));
+    }
+    
+    setIsTaskModalOpen(true);
   };
 
   const openEditTask = (task: Task) => {
@@ -507,14 +653,14 @@ export default function App() {
     setTaskTitle(task.title);
     setTaskDesc(task.description || '');
     setTaskPoints(task.points);
-    setTaskDay(task.day);
+    setTaskToday(!!task.today);
+    setTaskWeek(task.week);
     setTaskRequestedBy(task.requestedBy || '');
     setIsTaskModalOpen(true);
   };
 
   const handleTitleChange = (val: string) => {
     setTaskTitle(val);
-    // Real-time title parsing: match 'for Sarah', 'asks Alex', etc.
     const match = val.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
     if (match && match[1]) {
       setTaskRequestedBy(match[1]);
@@ -529,7 +675,6 @@ export default function App() {
     setQuickTaskTitle('');
     setIsTriaging(true);
 
-    // Try AI triage first, fall back to local heuristics
     let triage = await triageWithAI(raw, currentWeek, settings, tasks);
     if (!triage) triage = triageLocally(raw, currentWeek) as any;
 
@@ -545,7 +690,6 @@ export default function App() {
         title: s.title,
         points: s.points,
         week: s.week,
-        day: s.day,
         status: 'todo' as const,
         createdAt: Date.now(),
         requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
@@ -572,7 +716,7 @@ export default function App() {
       title: triage!.title,
       points: triage!.points,
       week: (triage as any).week,
-      day: triage!.day,
+      today: triage!.today,
       status: 'todo',
       createdAt: Date.now(),
       requestedBy: assignedRequester,
@@ -601,7 +745,7 @@ export default function App() {
       const moves = await silentRebalance(updatedTasks, (triage as any).week, settings.weeklyPointsLimit, settings.openaiApiKey);
       for (const mv of moves) {
         updatedTasks = updatedTasks.map(t =>
-          t.id === mv.taskId ? { ...t, week: mv.toWeek, day: mv.toDay } : t
+          t.id === mv.taskId ? { ...t, week: mv.toWeek } : t
         );
         addToast(`Moved "${mv.label}" → next week`);
       }
@@ -612,7 +756,7 @@ export default function App() {
     setIsTriaging(false);
 
     const weekLabel = triage!.weekOffset === 0 ? 'this week' : triage!.weekOffset === 1 ? 'next week' : `in ${triage!.weekOffset} weeks`;
-    addToast(`✓ Added "${newTask.title}" → ${newTask.day}, ${weekLabel} (${newTask.points}pt)`);
+    addToast(`✓ Added "${newTask.title}" → ${newTask.today ? 'Today' : 'Backlog'}, ${weekLabel} (${newTask.points}pt)`);
 
     // Background AI enrichment
     if (settings.openaiApiKey) {
@@ -633,7 +777,6 @@ export default function App() {
     const currentWeekTasks = tasks.filter(t => t.week === currentWeek && t.status !== 'done');
     if (currentWeekTasks.length === 0) return;
     
-    // Sort by newest
     const sorted = [...currentWeekTasks].sort((a, b) => b.createdAt - a.createdAt);
     const targetTask = sorted[0];
 
@@ -667,8 +810,8 @@ export default function App() {
       title: taskTitle,
       description: taskDesc,
       points: taskPoints,
-      week: editingTask?.week || currentWeek,
-      day: taskDay,
+      week: taskWeek,
+      today: taskToday,
       status: (editingTask?.status || 'todo') as 'todo' | 'in-progress' | 'done',
       createdAt: editingTask?.createdAt || Date.now(),
       requestedBy: cleanedName || undefined,
@@ -717,7 +860,7 @@ export default function App() {
           let rebalanced = [...updatedTasks];
           for (const mv of moves) {
             rebalanced = rebalanced.map(t =>
-              t.id === mv.taskId ? { ...t, week: mv.toWeek, day: mv.toDay } : t
+              t.id === mv.taskId ? { ...t, week: mv.toWeek } : t
             );
             addToast(`Moved "${mv.label}" → next week`);
           }
@@ -771,12 +914,6 @@ export default function App() {
     const nextPoints = pointsOrder[(currentIndex + 1) % pointsOrder.length];
     
     const updated = tasks.map(t => t.id === task.id ? { ...t, points: nextPoints } : t);
-    saveTasksState(updated);
-  };
-
-  const handleMoveDay = (task: Task, targetDay: Weekday, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = tasks.map(t => t.id === task.id ? { ...t, day: targetDay } : t);
     saveTasksState(updated);
   };
 
@@ -858,22 +995,22 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       pendingTask: {
         title: pendingTaskAction.task.title,
         points: pendingTaskAction.task.points,
-        day: pendingTaskAction.task.day,
+        today: pendingTaskAction.task.today,
         week: pendingTaskAction.task.week,
         requestedBy: pendingTaskAction.task.requestedBy,
         metadata: pendingTaskAction.task.metadata
       },
       settings: settings,
-      onPostponeTask: (taskId, targetWeek, targetDay) => {
+      onPostponeTask: (taskId, targetWeek, _targetDay) => {
         setAgentMessages(prev => [...prev, {
           id: Math.random().toString(36).substring(2, 9),
           sender: 'agent',
-          text: `⚙️ *Tool execution: Rescheduling task [ID: ${taskId}] to ${targetWeek} (${targetDay})*`,
+          text: `⚙️ *Tool execution: Rescheduling task [ID: ${taskId}] to ${targetWeek}*`,
           timestamp: Date.now()
         }]);
 
         setTasks(prev => prev.map(t => {
-          if (t.id === taskId) return { ...t, week: targetWeek, day: targetDay };
+          if (t.id === taskId) return { ...t, week: targetWeek, today: false };
           return t;
         }));
       },
@@ -976,7 +1113,6 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       title: 'Current Week Capacity Review',
       points: 1,
       week: currentWeek,
-      day: 'Monday',
       status: 'todo',
       createdAt: Date.now()
     };
@@ -1095,6 +1231,251 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
     );
   }
 
+  const renderTaskSectionList = (
+    title: string,
+    sectionKey: 'today' | 'week' | 'next-week' | 'later',
+    sectionTasks: Task[],
+    pointsLimit?: number
+  ) => {
+    const todoTasks = sectionTasks.filter(t => t.status !== 'done');
+    const doneTasks = sectionTasks.filter(t => t.status === 'done');
+    const totalPoints = sectionTasks.filter(t => t.status !== 'done').reduce((s, t) => s + t.points, 0);
+
+    const isSectionHovered = dragOverSection === sectionKey;
+
+    return (
+      <section 
+        className={`weekday-column glass ${isSectionHovered ? 'drag-hover-section' : ''}`}
+        style={{ 
+          width: '100%', 
+          minHeight: '120px', 
+          padding: '1rem', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '0.6rem',
+          border: isSectionHovered ? '2px dashed var(--accent-primary)' : '1px solid var(--border-color)',
+          background: isSectionHovered ? 'rgba(29, 78, 216, 0.05)' : undefined,
+          transition: 'all 0.2s ease-in-out'
+        }}
+        onDragOver={handleDragOver}
+        onDragEnter={() => handleDragEnterSection(sectionKey)}
+        onDrop={(e) => handleDropOnSection(e, sectionKey)}
+      >
+        <div className="column-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="column-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {sectionKey === 'today' ? '☀️' : sectionKey === 'week' ? '📥' : sectionKey === 'next-week' ? '📅' : '⏳'}
+            {title}
+          </span>
+          <span className="column-points-badge" style={{ fontSize: '0.82rem', padding: '0.2rem 0.5rem' }}>
+            {totalPoints} {pointsLimit ? `/ ${pointsLimit}` : ''} pts
+          </span>
+        </div>
+
+        {sectionKey === 'today' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {todaySuggestion && todoTasks.length > 1 && (
+              <div style={{
+                background: 'rgba(29,78,216,0.06)',
+                border: '1px solid rgba(29,78,216,0.15)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.45rem 0.6rem',
+                fontSize: '0.82rem',
+                color: 'var(--accent-primary)',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+              }}>
+                <span>🎯</span>
+                <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginRight: '0.2rem' }}>Start with:</span>
+                {todaySuggestion}
+              </div>
+            )}
+            <button
+              onClick={handleAutoFillToday}
+              className="btn-secondary"
+              style={{
+                fontSize: '0.74rem',
+                padding: '0.3rem 0.6rem',
+                minHeight: '36px',
+                width: 'fit-content',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                borderColor: 'rgba(29, 78, 216, 0.3)',
+                color: 'var(--accent-primary)',
+                background: 'rgba(29, 78, 216, 0.02)'
+              }}
+            >
+              🪄 Auto-Fill Today
+            </button>
+          </div>
+        )}
+
+        <div className="task-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {[...todoTasks, ...doneTasks].map(task => {
+            const isDraggingThis = draggedTaskId === task.id;
+            const isDragOverThis = dragOverTaskId === task.id;
+
+            return (
+              <div 
+                key={task.id} 
+                className={`task-card ${task.status === 'done' ? 'completed' : ''} ${isDraggingThis ? 'dragging' : ''} ${isDragOverThis ? 'drag-over' : ''}`}
+                draggable={task.status !== 'done'}
+                onDragStart={(e) => handleDragStart(e, task.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (draggedTaskId && draggedTaskId !== task.id && task.status !== 'done') {
+                    if (dragOverTaskId !== task.id) {
+                      setDragOverTaskId(task.id);
+                      setDragOverSection(null);
+                    }
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverTaskId === task.id) {
+                    setDragOverTaskId(null);
+                  }
+                }}
+                onDrop={(e) => handleDropOnTask(e, task.id)}
+                style={{ 
+                  cursor: task.status === 'done' ? 'default' : 'grab',
+                  opacity: isDraggingThis ? 0.4 : 1,
+                  borderTop: isDragOverThis ? '3px solid var(--accent-primary)' : undefined,
+                  transform: isDragOverThis ? 'translateY(2px)' : undefined,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {task.parentProject && (
+                  <div style={{ 
+                    fontSize: '0.7rem', 
+                    color: 'var(--accent-primary)',
+                    background: 'rgba(29, 78, 216, 0.05)',
+                    padding: '0.15rem 0.4rem',
+                    borderRadius: '3px',
+                    marginBottom: '0.35rem', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '0.2rem',
+                    fontWeight: 600,
+                    width: 'fit-content',
+                    fontFamily: 'var(--font-sans)',
+                  }}>
+                    <span>🔗</span>
+                    <span>{task.parentProject}</span>
+                  </div>
+                )}
+                <div className="task-card-header">
+                  <label className="task-checkbox-container">
+                    <input 
+                      type="checkbox" 
+                      className="task-checkbox" 
+                      checked={task.status === 'done'}
+                      onChange={() => toggleTaskStatus(task)}
+                    />
+                  </label>
+                  <span className="task-title" onClick={() => openEditTask(task)}>
+                    {task.title}
+                  </span>
+                  <span 
+                    className={`task-points-badge badge-${task.points}`}
+                    onClick={(e) => handleCyclePoints(task, e)}
+                    style={{ cursor: 'pointer' }}
+                    title="Tap to cycle size"
+                  >
+                    {task.points}
+                  </span>
+                </div>
+                {task.description && (
+                  <p className="task-desc" onClick={() => openEditTask(task)}>
+                    {task.description}
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {task.status !== 'done' && (
+                      <button
+                        className="focus-btn"
+                        onClick={(e) => handleToggleToday(task, e)}
+                        style={{
+                          background: task.today ? 'rgba(29, 78, 216, 0.15)' : 'rgba(29, 78, 216, 0.05)',
+                          color: 'var(--accent-primary)',
+                          border: 'none',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.35rem 0.65rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          minHeight: '36px',
+                          transition: 'background 0.2s',
+                        }}
+                      >
+                        {task.today ? '★ Today' : '☆ Today'}
+                      </button>
+                    )}
+                    {task.points >= 3 && task.status !== 'done' && (
+                      <button
+                        className="focus-btn"
+                        onClick={() => setFocusTask(task)}
+                        style={{
+                          background: 'rgba(29, 78, 216, 0.08)',
+                          color: 'var(--accent-primary)',
+                          border: 'none',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.35rem 0.65rem',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          minHeight: '36px',
+                          transition: 'background 0.2s',
+                        }}
+                      >
+                        ▶ Focus
+                      </button>
+                    )}
+                    {task.requestedBy && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
+                        <User size={11} /> for {task.requestedBy}
+                      </span>
+                    )}
+                  </div>
+                  <button 
+                    className="task-action-btn delete-btn" 
+                    onClick={() => handleDeleteTask(task.id)}
+                    title="Delete Task"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {sectionTasks.length === 0 && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+              No tasks. Drag tasks here or add one below.
+            </div>
+          )}
+        </div>
+
+        <button 
+          className="btn-add-task-inline" 
+          onClick={() => openAddTask(sectionKey)}
+          style={{ marginTop: '0.4rem' }}
+        >
+          <Plus size={14} /> Add Task
+        </button>
+      </section>
+    );
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -1111,25 +1492,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
 
 
-        {/* Week Navigator */}
-        <div className="week-navigator">
-          <button 
-            className="nav-btn" 
-            onClick={() => setCurrentWeek(getOffsetWeek(currentWeek, -1))}
-            title="Previous Week"
-          >
-            ←
-          </button>
-          <span className="current-week-label">
+        {/* Week Date Info */}
+        <div className="week-navigator" style={{ pointerEvents: 'none' }}>
+          <span className="current-week-label" style={{ fontWeight: 600 }}>
             {formatWeekRange(currentWeek)}
           </span>
-          <button 
-            className="nav-btn" 
-            onClick={() => setCurrentWeek(getOffsetWeek(currentWeek, 1))}
-            title="Next Week"
-          >
-            →
-          </button>
         </div>
 
         <div className="header-actions" style={{ position: 'relative' }}>
@@ -1367,27 +1734,48 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           </form>
 
           {/* Progress / Capacity Dashboard */}
-          {/* Progress / Capacity Dashboard */}
-          <div className="capacity-card glass" style={{ marginBottom: '1.2rem', padding: '1rem' }}>
-            <div className="capacity-header">
-              <h3 className="capacity-title">Active Weekly Load</h3>
-              <div className="capacity-fraction">
-                {getWeekPoints(currentWeek)} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>/ {settings.weeklyPointsLimit} pts</span>
+          <div className="capacity-card glass" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Today's Focus Load</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {getTodayPoints()} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {settings.dailyPointsLimit || 7} pts</span>
+                  </span>
+                </div>
+                <div className="capacity-bar-container" style={{ height: '6px' }}>
+                  <div 
+                    className="capacity-bar-fill" 
+                    style={{ 
+                      width: `${Math.min(100, (getTodayPoints() / (settings.dailyPointsLimit || 7)) * 100)}%`, 
+                      background: getTodayPoints() > (settings.dailyPointsLimit || 7) ? 'var(--color-danger)' : 'var(--accent-primary)' 
+                    }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Active Weekly Load</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {getWeekPoints(currentWeek)} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {settings.weeklyPointsLimit} pts</span>
+                  </span>
+                </div>
+                <div className="capacity-bar-container" style={{ height: '6px' }}>
+                  <div 
+                    className="capacity-bar-fill" 
+                    style={{ 
+                      width: `${progressPercent}%`, 
+                      background: getWeekPoints(currentWeek) > settings.weeklyPointsLimit ? 'var(--color-danger)' : progressBarColor 
+                    }}
+                  />
+                </div>
               </div>
             </div>
-            <div className="capacity-bar-container">
-              <div 
-                className="capacity-bar-fill" 
-                style={{ 
-                  width: `${progressPercent}%`, 
-                  background: progressBarColor 
-                }}
-              />
-            </div>
-            {getWeekPoints(currentWeek) > settings.weeklyPointsLimit ? (
-              <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem' }}>
+            
+            {(getTodayPoints() > (settings.dailyPointsLimit || 7) || getWeekPoints(currentWeek) > settings.weeklyPointsLimit) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem' }}>
                 <div style={{ color: 'var(--color-danger)', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                  <AlertTriangle size={12} /> Limit exceeded (+{getWeekPoints(currentWeek) - settings.weeklyPointsLimit} pts).
+                  <AlertTriangle size={12} /> Limit exceeded!
                 </div>
                 {settings.openaiApiKey && (
                   <button 
@@ -1410,171 +1798,15 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   </button>
                 )}
               </div>
-            ) : progressPercent >= 100 ? (
-              <div style={{ color: 'var(--color-warning)', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600, marginTop: '0.5rem' }}>
-                <AlertTriangle size={12} /> Full capacity limit met.
-              </div>
-            ) : null}
+            )}
           </div>
 
-          {/* Kanban / Grid Columns */}
-          <main className="columns-container">
-            {WEEKDAYS.map(day => {
-              const dayTasks = tasks.filter(t => t.week === currentWeek && t.day === day);
-              const dayPoints = getDayPoints(currentWeek, day);
-              const todayIdx = new Date().getDay();
-              const todayWeekday = WEEKDAYS[Math.min(Math.max(todayIdx - 1, 0), 4)];
-              const isToday = day === todayWeekday && currentWeek === getIsoWeek(new Date());
-              return (
-                <section key={day} className="weekday-column glass">
-                  <div className="column-header">
-                    <span className="column-title">{day}{isToday ? ' ·' : ''}</span>
-                    <span className="column-points-badge">{dayPoints} pts</span>
-                  </div>
-
-                  {/* Today's focus suggestion */}
-                  {isToday && todaySuggestion && (
-                    <div style={{
-                      background: 'rgba(29,78,216,0.06)',
-                      border: '1px solid rgba(29,78,216,0.15)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '0.45rem 0.6rem',
-                      fontSize: '0.82rem',
-                      color: 'var(--accent-primary)',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                    }}>
-                      <span>🎯</span>
-                      <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginRight: '0.2rem' }}>Start with:</span>
-                      {todaySuggestion}
-                    </div>
-                  )}
-
-                  <div className="task-list">
-                    {dayTasks.map(task => (
-                      <div 
-                        key={task.id} 
-                        className={`task-card ${task.status === 'done' ? 'completed' : ''}`}
-                      >
-                        {task.parentProject && (
-                          <div style={{ 
-                            fontSize: '0.7rem', 
-                            color: 'var(--accent-primary)',
-                            background: 'rgba(29, 78, 216, 0.05)',
-                            padding: '0.15rem 0.4rem',
-                            borderRadius: '3px',
-                            marginBottom: '0.35rem', 
-                            display: 'inline-flex', 
-                            alignItems: 'center', 
-                            gap: '0.2rem',
-                            fontWeight: 600,
-                            width: 'fit-content',
-                            fontFamily: 'var(--font-sans)',
-                          }}>
-                            <span>🔗</span>
-                            <span>{task.parentProject}</span>
-                          </div>
-                        )}
-                        <div className="task-card-header">
-                          <label className="task-checkbox-container">
-                            <input 
-                              type="checkbox" 
-                              className="task-checkbox" 
-                              checked={task.status === 'done'}
-                              onChange={() => toggleTaskStatus(task)}
-                            />
-                          </label>
-                          <span className="task-title" onClick={() => openEditTask(task)}>
-                            {task.title}
-                          </span>
-                          <span 
-                            className={`task-points-badge badge-${task.points}`}
-                            onClick={(e) => handleCyclePoints(task, e)}
-                            style={{ cursor: 'pointer' }}
-                            title="Tap to cycle size"
-                          >
-                            {task.points}
-                          </span>
-                        </div>
-                        {task.description && (
-                          <p className="task-desc" onClick={() => openEditTask(task)}>
-                            {task.description}
-                          </p>
-                        )}
-
-                        {/* Inline day picker */}
-                        <div className="task-day-picker">
-                          {(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] as Weekday[]).map(wd => {
-                            const isCurrent = task.day === wd;
-                            const label = wd === 'Wednesday' ? 'W' : wd === 'Thursday' ? 'Th' : wd.charAt(0);
-                            return (
-                              <button
-                                key={wd}
-                                type="button"
-                                className={`day-picker-btn${isCurrent ? ' active' : ''}`}
-                                onClick={(e) => handleMoveDay(task, wd, e)}
-                                title={`Move to ${wd}`}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', gap: '0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                            {task.points >= 3 && task.status !== 'done' && (
-                              <button
-                                className="focus-btn"
-                                onClick={() => setFocusTask(task)}
-                                style={{
-                                  background: 'rgba(29, 78, 216, 0.08)',
-                                  color: 'var(--accent-primary)',
-                                  border: 'none',
-                                  borderRadius: 'var(--radius-sm)',
-                                  padding: '0.35rem 0.65rem',
-                                  fontSize: '0.72rem',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                  minHeight: '36px',
-                                  transition: 'background 0.2s',
-                                }}
-                              >
-                                ▶ Focus
-                              </button>
-                            )}
-                            {task.requestedBy && (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontFamily: 'var(--font-mono)' }}>
-                                <User size={11} /> for {task.requestedBy}
-                              </span>
-                            )}
-                          </div>
-                          <button 
-                            className="task-action-btn delete-btn" 
-                            onClick={() => handleDeleteTask(task.id)}
-                            title="Delete Task"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button 
-                    className="btn-add-task-inline" 
-                    onClick={() => openAddTask(day)}
-                  >
-                    <Plus size={14} /> Add
-                  </button>
-                </section>
-              );
-            })}
+          {/* Stacked Horizons Sections */}
+          <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
+            {renderTaskSectionList('Focus Today', 'today', tasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
+            {renderTaskSectionList("This Week's Backlog", 'week', tasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
+            {renderTaskSectionList('Next Week', 'next-week', tasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
+            {renderTaskSectionList('Later', 'later', tasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
           </main>
 
 
@@ -1634,18 +1866,33 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               </div>
 
               <div className="form-group">
-                <label htmlFor="task-day-select">Day</label>
+                <label htmlFor="task-week-select">Target Week</label>
                 <select 
-                  id="task-day-select"
+                  id="task-week-select"
                   className="form-control"
-                  value={taskDay}
-                  onChange={e => setTaskDay(e.target.value as Weekday)}
+                  value={taskWeek}
+                  onChange={e => setTaskWeek(e.target.value)}
                 >
-                  {WEEKDAYS.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
+                  <option value={currentWeek}>This Week</option>
+                  <option value={getOffsetWeekFromNow(1)}>Next Week</option>
+                  <option value={getOffsetWeekFromNow(2)}>Later (2 Weeks)</option>
+                  <option value={getOffsetWeekFromNow(3)}>Later (3 Weeks)</option>
+                  <option value={getOffsetWeekFromNow(4)}>Later (4 Weeks)</option>
                 </select>
               </div>
+            </div>
+
+            <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', margin: '0.2rem 0' }}>
+              <input 
+                id="task-today-checkbox"
+                type="checkbox"
+                checked={taskToday}
+                onChange={e => setTaskToday(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <label htmlFor="task-today-checkbox" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', userSelect: 'none' }}>
+                ⭐ Schedule for Today's Focus List
+              </label>
             </div>
 
             <div className="form-group">
@@ -1748,18 +1995,34 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
               />
             </div>
 
-            <div className="form-group">
-              <label htmlFor="settings-limit">Weekly Story Point Capacity Limit</label>
-              <input 
-                id="settings-limit"
-                type="number" 
-                className="form-control" 
-                value={settings.weeklyPointsLimit}
-                onChange={e => setSettings({ ...settings, weeklyPointsLimit: Number(e.target.value) })}
-                min={5}
-                max={100}
-                required
-              />
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label htmlFor="settings-limit">Weekly Points Limit</label>
+                <input 
+                  id="settings-limit"
+                  type="number" 
+                  className="form-control" 
+                  value={settings.weeklyPointsLimit}
+                  onChange={e => setSettings({ ...settings, weeklyPointsLimit: Number(e.target.value) })}
+                  min={5}
+                  max={100}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="settings-daily-limit">Daily Points Limit</label>
+                <input 
+                  id="settings-daily-limit"
+                  type="number" 
+                  className="form-control" 
+                  value={settings.dailyPointsLimit || 7}
+                  onChange={e => setSettings({ ...settings, dailyPointsLimit: Number(e.target.value) })}
+                  min={1}
+                  max={30}
+                  required
+                />
+              </div>
             </div>
 
             <div className="form-actions">

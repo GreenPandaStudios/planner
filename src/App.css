@@ -480,6 +480,19 @@
   border-bottom-width: 1px;
 }
 
+.task-card.dragging {
+  opacity: 0.35;
+  border: 1.5px dashed var(--accent-primary) !important;
+  background: rgba(29, 78, 216, 0.02);
+  box-shadow: none;
+}
+
+.task-card.drag-over {
+  border-top: 3px solid var(--accent-primary) !important;
+  transform: translateY(2px);
+  box-shadow: 0 4px 6px rgba(29, 78, 216, 0.1);
+}
+
 .task-card-header {
   display: flex;
   align-items: flex-start;

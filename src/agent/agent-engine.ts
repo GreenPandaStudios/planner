@@ -15,7 +15,7 @@ export interface AgentContext {
   pendingTask: { 
     title: string; 
     points: number; 
-    day: Weekday; 
+    today?: boolean; 
     week: string; 
     requestedBy?: string;
     metadata?: TaskMetadata;
@@ -99,7 +99,7 @@ export function buildSystemPrompt(context: AgentContext): string {
   let taskListMarkdown = currentWeekTasks.map(t => {
     const meta = t.metadata;
     const metaStr = meta ? `[Energy: ${meta.energyLevel || '?'}, Domain: ${meta.domain || '?'}, Sentiment: ${meta.sentiment || '?'}, Urgency: ${meta.urgency || '?'}]` : '[No metadata]';
-    return `- [ID: ${t.id}] "${t.title}" (${t.points} pts) - ${t.day} [Assignee: ${t.requestedBy || 'Personal'}] ${metaStr}`;
+    return `- [ID: ${t.id}] "${t.title}" (${t.points} pts) - ${t.today ? 'Today' : 'Backlog'} [Assignee: ${t.requestedBy || 'Personal'}] ${metaStr}`;
   }).join('\n') || 'No tasks currently scheduled.';
 
   const pendingMetaStr = pendingMeta ? `[Energy: ${pendingMeta.energyLevel || '?'}, Domain: ${pendingMeta.domain || '?'}, Sentiment: ${pendingMeta.sentiment || '?'}, Urgency: ${pendingMeta.urgency || '?'}]` : '[No metadata]';
@@ -117,7 +117,7 @@ We define points as focus effort:
 The user is trying to schedule:
 - Title: "${context.pendingTask.title}"
 - Points: ${context.pendingTask.points} points
-- Day: ${context.pendingTask.day}
+- Time: ${context.pendingTask.today ? 'Today' : 'Backlog'}
 - Week: ${context.pendingTask.week}
 - For Person / Requested By: "${context.pendingTask.requestedBy || 'Personal / Unassigned'}"
 - Task Metadata: ${pendingMetaStr}
