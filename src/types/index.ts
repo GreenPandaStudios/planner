@@ -32,6 +32,7 @@ export interface Task {
   today?: boolean; // Scheduled for Focus Today
   delegated?: boolean; // Has this task been delegated
   delegatedTo?: string; // Who this task was delegated to
+  triaging?: boolean; // Is the task currently being triaged by AI in the background
 }
 
 export interface AppSettings {

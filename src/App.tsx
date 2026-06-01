@@ -11,7 +11,8 @@ import {
   Download,
   Upload,
   Globe,
-  User
+  User,
+  Ban
 } from 'lucide-react';
 import type { Task, AppSettings, AgentChatMessage, Person, TaskMetadata } from './types';
 import { 
@@ -285,7 +286,6 @@ export default function App() {
 
   // --- Today's focus suggestion ---
   const [todaySuggestion, setTodaySuggestion] = useState<string | null>(null);
-  const [isTriaging, setIsTriaging] = useState(false);
   // --- Focus Mode ---
   const [focusTask, setFocusTask] = useState<Task | null>(null);
 
@@ -299,7 +299,6 @@ export default function App() {
   // Native dialog refs
   const settingsDialogRef = useRef<HTMLDialogElement>(null);
   const taskDialogRef = useRef<HTMLDialogElement>(null);
-  const negotiatorDialogRef = useRef<HTMLDialogElement>(null);
   const quickCaptureInputRef = useRef<HTMLInputElement>(null);
 
   // --- Initialization ---
@@ -406,10 +405,7 @@ export default function App() {
 
   useEffect(() => {
     if (isNegotiating) {
-      negotiatorDialogRef.current?.showModal();
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      negotiatorDialogRef.current?.close();
     }
   }, [isNegotiating]);
 
@@ -758,58 +754,39 @@ export default function App() {
     const raw = quickTaskTitle.trim();
     if (!raw) return;
 
+    // Clear input immediately so user can keep typing/working
     setQuickTaskTitle('');
-    setIsTriaging(true);
 
-    let triage = await triageWithAI(raw, currentWeek, settings, tasks);
-    if (!triage) triage = triageLocally(raw, currentWeek) as any;
-
-    const weekOffset: number = (triage as any).weekOffset ?? 0;
-
-    // --- Subtask breakdown: if this looks like a multi-week project ---
-    if (shouldBreakDown(raw, weekOffset)) {
-      const parentTitle = triage!.title;
-      const subtasks = await expandToSubtasks(parentTitle, weekOffset, currentWeek, settings.openaiApiKey);
-
-      const newSubtasks: Task[] = subtasks.map(s => ({
-        id: Math.random().toString(36).substring(2, 9),
-        title: s.title,
-        points: s.points,
-        week: s.week,
-        status: 'todo' as const,
-        createdAt: Date.now(),
-        requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
-        parentProject: parentTitle,
-        metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: appMode, sentiment: 'neutral' },
-      }));
-
-      let updatedTasks = [...tasks, ...newSubtasks];
-      setTasks(updatedTasks);
-      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
-      setIsTriaging(false);
-      addToast(`🔗 "${parentTitle}" → ${newSubtasks.length} subtasks across ${new Set(newSubtasks.map(s => s.week)).size} weeks`);
-      if (settings.githubPat && settings.gistId) triggerGistSyncPush(updatedTasks, people);
-      return;
-    }
-
-    // --- Single task flow ---
-    const parsedMeta = parseTaskMetadataLocally(triage!.title);
-    parsedMeta.domain = appMode;
-    const requesterMatch = raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/);
-    const assignedRequester = requesterMatch?.[1];
-
+    const tempId = 'temp-' + Math.random().toString(36).substring(2, 9);
+    
+    // Quick heuristic parse to have a placeholder point size and target week
+    const quickHeuristic = triageLocally(raw, currentWeek);
+    
     const newTask: Task = {
-      id: Math.random().toString(36).substring(2, 9),
-      title: triage!.title,
-      points: triage!.points,
-      week: (triage as any).week,
-      today: triage!.today,
+      id: tempId,
+      title: quickHeuristic.title,
+      points: quickHeuristic.points,
+      week: quickHeuristic.week || currentWeek,
+      today: quickHeuristic.today || false,
       status: 'todo',
       createdAt: Date.now(),
-      requestedBy: assignedRequester,
-      metadata: parsedMeta,
+      triaging: true, // Mark as background triaging!
+      requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
+      metadata: {
+        domain: appMode,
+        priority: 'medium',
+        energyLevel: 'medium',
+        sentiment: 'neutral',
+        urgency: 'flexible'
+      }
     };
 
+    // Save task immediately in state and localStorage
+    const updatedTasks = [...tasks, newTask];
+    setTasks(updatedTasks);
+    localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
+
+    const assignedRequester = newTask.requestedBy;
     let nextPeople = people;
     if (assignedRequester) {
       const exists = people.some(p => p.name.toLowerCase() === assignedRequester.toLowerCase());
@@ -821,43 +798,106 @@ export default function App() {
       }
     }
 
-    let updatedTasks = [...tasks, newTask];
+    // Launch background async AI triage
+    triageWithAI(raw, currentWeek, settings, tasks).then(async (triageResult) => {
+      const finalTriage = triageResult || quickHeuristic;
+      const parsedMeta = parseTaskMetadataLocally(finalTriage.title);
+      parsedMeta.domain = appMode;
 
-    // Silent overflow rebalance
-    const weekPoints = updatedTasks
-      .filter(t => t.week === (triage as any).week && t.status !== 'done')
-      .reduce((s, t) => s + t.points, 0);
+      // Handle subtask breakdown if needed
+      if (shouldBreakDown(raw, finalTriage.weekOffset ?? 0)) {
+        const parentTitle = finalTriage.title;
+        // Fetch subtasks in the background
+        expandToSubtasks(parentTitle, finalTriage.weekOffset ?? 0, currentWeek, settings.openaiApiKey)
+          .then(subtasks => {
+            const newSubtasks: Task[] = subtasks.map(s => ({
+              id: Math.random().toString(36).substring(2, 9),
+              title: s.title,
+              points: s.points,
+              week: s.week,
+              status: 'todo' as const,
+              createdAt: Date.now(),
+              requestedBy: assignedRequester,
+              parentProject: parentTitle,
+              metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: appMode, sentiment: 'neutral' },
+            }));
 
-    if (weekPoints > settings.weeklyPointsLimit) {
-      const moves = await silentRebalance(updatedTasks, (triage as any).week, settings.weeklyPointsLimit, settings.openaiApiKey);
-      for (const mv of moves) {
-        updatedTasks = updatedTasks.map(t =>
-          t.id === mv.taskId ? { ...t, week: mv.toWeek } : t
-        );
-        addToast(`Moved "${mv.label}" → next week`);
+            setTasks(current => {
+              // Remove the temporary parent task and add subtasks
+              const filtered = current.filter(t => t.id !== tempId);
+              const nextTasks = [...filtered, ...newSubtasks];
+              localStorage.setItem('antigravity_planner_tasks', JSON.stringify(nextTasks));
+              if (settings.githubPat && settings.gistId) triggerGistSyncPush(nextTasks, nextPeople);
+              return nextTasks;
+            });
+
+            addToast(`🔗 "${parentTitle}" → split into ${newSubtasks.length} subtasks`);
+          });
+        return;
       }
-    }
 
-    setTasks(updatedTasks);
-    localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedTasks));
-    setIsTriaging(false);
-
-    const weekLabel = triage!.weekOffset === 0 ? 'this week' : triage!.weekOffset === 1 ? 'next week' : `in ${triage!.weekOffset} weeks`;
-    addToast(`✓ Added "${newTask.title}" → ${newTask.today ? 'Today' : 'Backlog'}, ${weekLabel} (${newTask.points}pt)`);
-
-    // Background AI enrichment
-    if (settings.openaiApiKey) {
-      enrichTaskWithAI(newTask, settings.openaiApiKey).then(enrichedMeta => {
-        setTasks(current => {
-          const next = current.map(t => t.id === newTask.id ? { ...t, metadata: enrichedMeta } : t);
-          localStorage.setItem('antigravity_planner_tasks', JSON.stringify(next));
-          if (settings.githubPat && settings.gistId) triggerGistSyncPush(next, nextPeople);
-          return next;
+      // Single task update
+      setTasks(current => {
+        const nextTasks = current.map(t => {
+          if (t.id === tempId) {
+            return {
+              ...t,
+              title: finalTriage.title,
+              points: finalTriage.points,
+              week: finalTriage.week || currentWeek,
+              today: finalTriage.today || false,
+              triaging: undefined, // remove triaging flag!
+              metadata: parsedMeta
+            };
+          }
+          return t;
         });
+
+        localStorage.setItem('antigravity_planner_tasks', JSON.stringify(nextTasks));
+
+        // Check for capacity limit breaches
+        const finalWeek = finalTriage.week || currentWeek;
+        const finalWeekPoints = nextTasks
+          .filter(t => t.week === finalWeek && t.status !== 'done')
+          .reduce((s, t) => s + t.points, 0);
+
+        if (finalWeekPoints > settings.weeklyPointsLimit) {
+          const breachedTask = nextTasks.find(t => t.id === tempId);
+          if (breachedTask) {
+            setPendingTaskAction({
+              type: 'add',
+              task: breachedTask
+            });
+            setIsNegotiating(true);
+            addToast(`⚠️ Capacity limit reached. Open Coach in sidebar.`);
+          }
+        } else {
+          addToast(`✓ Triaged "${finalTriage.title}" (${finalTriage.points}pt)`);
+        }
+
+        // Trigger Gist Sync Push
+        if (settings.githubPat && settings.gistId) {
+          triggerGistSyncPush(nextTasks, nextPeople);
+        }
+
+        // Background AI enrichment
+        if (settings.openaiApiKey) {
+          const updatedSingleTask = nextTasks.find(t => t.id === tempId);
+          if (updatedSingleTask) {
+            enrichTaskWithAI(updatedSingleTask, settings.openaiApiKey).then(enrichedMeta => {
+              setTasks(current => {
+                const next = current.map(t => t.id === tempId ? { ...t, metadata: enrichedMeta } : t);
+                localStorage.setItem('antigravity_planner_tasks', JSON.stringify(next));
+                if (settings.githubPat && settings.gistId) triggerGistSyncPush(next, nextPeople);
+                return next;
+              });
+            });
+          }
+        }
+
+        return nextTasks;
       });
-    } else {
-      if (settings.githubPat && settings.gistId) triggerGistSyncPush(updatedTasks, nextPeople);
-    }
+    });
   };
 
   const handleTriggerManualTriage = () => {
@@ -1066,7 +1106,7 @@ export default function App() {
   };
 
   // --- Negotiation Agent Orchestration ---
-  const initiateNegotiation = (pending: Task, currentTasks: Task[], _peopleList?: Person[]) => {
+  const initiateNegotiation = (pending: Task, currentTasks: Task[]) => {
     const welcomeMsg = `### Capacity Limit Met
 Adding **"${pending.title}"** sized at **${pending.points} point(s)** ${pending.requestedBy ? `for **${pending.requestedBy}**` : ''} will push your active weekly load to **${getWeekPoints(pending.week, currentTasks) + pending.points} points**, which exceeds your set limit of **${settings.weeklyPointsLimit} points**.
 
@@ -1127,7 +1167,7 @@ I have paused the save to protect your focus. Let's review your schedule. I will
         metadata: pendingTaskAction.task.metadata
       },
       settings: settings,
-      onPostponeTask: (taskId, targetWeek, _targetDay) => {
+      onPostponeTask: (taskId, targetWeek) => {
         setAgentMessages(prev => [...prev, {
           id: Math.random().toString(36).substring(2, 9),
           sender: 'agent',
@@ -1193,12 +1233,9 @@ I have paused the save to protect your focus. Let's review your schedule. I will
 
       if (response.approved) {
         setTasks(current => {
-          let updatedList = current;
-          if (pendingTaskAction.type === 'edit') {
-            updatedList = current.map(t => t.id === pendingTaskAction.task.id ? pendingTaskAction.task : t);
-          } else {
-            updatedList = [...current, pendingTaskAction.task];
-          }
+          const updatedList = pendingTaskAction.type === 'edit'
+            ? current.map(t => t.id === pendingTaskAction.task.id ? pendingTaskAction.task : t)
+            : [...current, pendingTaskAction.task];
           saveTasksState(updatedList);
           return updatedList;
         });
@@ -1455,6 +1492,38 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           {[...todoTasks, ...doneTasks].map(task => {
             const isDraggingThis = draggedTaskId === task.id;
             const isDragOverThis = dragOverTaskId === task.id;
+
+            if (task.triaging) {
+              return (
+                <div 
+                  key={task.id} 
+                  className="task-card triaging-card animate-pulse"
+                  style={{ transition: 'all 0.15s ease' }}
+                >
+                  <div className="shimmer-effect"></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', position: 'relative', zIndex: 2 }}>
+                    <span style={{ fontSize: '0.9rem', animation: 'writing-bounce 1s infinite alternate ease-in-out', display: 'inline-block' }}>✏️</span>
+                    <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 500 }}>
+                        {task.title}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        Sizing & scheduling in background...
+                      </span>
+                    </div>
+                    <button 
+                      type="button"
+                      className="task-action-btn delete-btn" 
+                      onClick={() => handleDeleteTask(task.id)}
+                      title="Cancel background task"
+                      style={{ padding: '0.2rem', minHeight: 'auto', border: 'none', background: 'transparent' }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div 
@@ -1820,7 +1889,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         </div>
       )}
 
-      {/* Quick Capture Input Form */}
+      {/* Main Workspace Layout */}
+      <div className={`main-content-layout ${isNegotiating && pendingTaskAction ? 'has-sidebar' : ''}`}>
+        <div className="planner-main-panel" style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+
+          {/* Quick Capture Input Form */}
           <form 
             onSubmit={handleQuickAdd} 
             className="glass animate-fade-in" 
@@ -1847,16 +1920,14 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 fontFamily: 'var(--font-sans)',
                 color: 'var(--text-primary)'
               }}
-              placeholder={isTriaging ? '🧠 Triaging...' : '✏️ Add a task — AI will schedule it (e.g. "finish report this month")'}
+              placeholder='✏️ Add a task — AI will size and schedule it in the background'
               ref={quickCaptureInputRef}
               value={quickTaskTitle}
               onChange={e => setQuickTaskTitle(e.target.value)}
-              disabled={isTriaging}
             />
             <button 
               type="submit" 
               className="btn-primary" 
-              disabled={isTriaging}
               style={{ 
                 padding: '0.4rem 0.8rem', 
                 fontSize: '0.8rem', 
@@ -1864,8 +1935,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 margin: 0,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.2rem',
-                opacity: isTriaging ? 0.6 : 1,
+                gap: '0.2rem'
               }}
             >
               <Plus size={14} /> Add
@@ -2101,6 +2171,123 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
             {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
           </main>
+        </div>
+
+        {/* Capacity Negotiator Sidebar Drawer */}
+        {isNegotiating && pendingTaskAction && (
+          <aside className="agent-sidebar-drawer glass-elevated">
+            <div className="agent-negotiator-container">
+              
+              {/* Left strip metrics */}
+              <div className="agent-audit-sidebar">
+                <div className="audit-banner">
+                  <Brain size={16} style={{ marginBottom: '0.1rem' }} />
+                  <span>AUDIT</span>
+                </div>
+
+                <div className="audit-metric-group">
+                  <span className="audit-metric-label">
+                    WEEK {pendingTaskAction.task.week.replace(/^.*-W/, '')}
+                  </span>
+                  <span style={{ fontWeight: 'bold', fontSize: '0.9rem', fontFamily: 'var(--font-mono)', color: 'var(--color-danger)' }}>
+                    {getWeekPoints(pendingTaskAction.task.week)}/{settings.weeklyPointsLimit}
+                  </span>
+                  <div className="audit-metric-bar-container">
+                    <div 
+                      className="audit-metric-bar-fill" 
+                      style={{ 
+                        width: `${Math.min((getWeekPoints(pendingTaskAction.task.week) / settings.weeklyPointsLimit) * 100, 100)}%`,
+                        backgroundColor: getWeekPoints(pendingTaskAction.task.week) > settings.weeklyPointsLimit ? 'var(--color-danger)' : 'var(--accent-purple)'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="audit-task-card">
+                  <div className="audit-task-header">
+                    <span className="audit-task-title" style={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                      {pendingTaskAction.task.title}
+                    </span>
+                    <span className="audit-task-meta" style={{ fontSize: '0.6rem', fontWeight: 700, marginTop: '0.2rem' }}>
+                      +{pendingTaskAction.task.points} pts
+                    </span>
+                  </div>
+                </div>
+
+                <button 
+                  type="button"
+                  className="btn-abort"
+                  onClick={handleCancelNegotiation}
+                  title="Abort & Drop proposed task"
+                  style={{ cursor: 'pointer' }}
+                >
+                  <Ban size={11} style={{ marginRight: '0.2rem' }} /> Abort
+                </button>
+              </div>
+
+              {/* Right Side Chat */}
+              <div className="agent-chat-panel">
+                <header className="agent-chat-header">
+                  <div className="agent-avatar">CA</div>
+                  <div>
+                    <div className="agent-chat-title">Capacity Assistant</div>
+                    <div className="agent-chat-subtitle">Focus & Capacity Guardian</div>
+                  </div>
+                </header>
+
+                <div className="chat-message-list">
+                  {agentMessages.map(msg => (
+                    <div 
+                      key={msg.id} 
+                      className={`chat-bubble ${msg.sender === 'agent' ? 'agent' : 'user'} ${msg.text.startsWith('⚙️') ? 'tool-status' : ''}`}
+                      dangerouslySetInnerHTML={{ 
+                        __html: msg.text
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/\n/g, '<br />')
+                          .replace(/^- (.*?)$/gm, '• $1')
+                      }}
+                    />
+                  ))}
+
+                  {isAgentTyping && (
+                    <div className="chat-bubble agent" style={{ padding: '0.3rem 0.6rem' }}>
+                      <div className="typing-indicator">
+                        <div className="typing-dot" />
+                        <div className="typing-dot" />
+                        <div className="typing-dot" />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <div className="chat-input-bar">
+                  <input 
+                    type="text" 
+                    className="chat-input"
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSendAgentMessage()}
+                    placeholder="Propose a compromise..."
+                    disabled={isAgentTyping}
+                    autoFocus
+                  />
+                  <button 
+                    type="button"
+                    className="chat-send-btn" 
+                    onClick={handleSendAgentMessage}
+                    disabled={isAgentTyping || !chatInput.trim()}
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </aside>
+        )}
+      </div>
 
 
 
@@ -2356,159 +2543,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         </div>
       </dialog>
 
-      {/* Capacity Negotiator Chat Overlay */}
-      <dialog ref={negotiatorDialogRef} onClose={handleCancelNegotiation} style={{ padding: 0, overflow: 'hidden' }}>
-        {isNegotiating && pendingTaskAction && (
-          <div className="agent-negotiator-container glass-elevated">
-            
-            {/* Left sidebar */}
-            <aside className="agent-audit-sidebar">
-              <div className="audit-banner">
-                <Brain size={13} />
-                <span>CAPACITY ASSISTANT</span>
-              </div>
 
-              <div className="audit-metric-group">
-                <span className="audit-metric-label">
-                  Active Load (Week {pendingTaskAction.task.week})
-                </span>
-                <span style={{ fontWeight: 'bold', fontSize: '1.1rem', fontFamily: 'var(--font-mono)' }}>
-                  {getWeekPoints(pendingTaskAction.task.week)} / {settings.weeklyPointsLimit} pts
-                </span>
-                <div className="audit-metric-bar-container">
-                  <div 
-                    className="audit-metric-bar-fill" 
-                    style={{ 
-                      width: `${Math.min((getWeekPoints(pendingTaskAction.task.week) / settings.weeklyPointsLimit) * 100, 100)}%`,
-                      backgroundColor: getWeekPoints(pendingTaskAction.task.week) > settings.weeklyPointsLimit ? 'var(--color-danger)' : 'var(--accent-purple)'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem' }}>
-                TARGET TRANSACTION
-              </div>
-              <div className="audit-task-card" style={{ borderColor: 'var(--accent-cyan)' }}>
-                <div className="audit-task-header">
-                  <span className="audit-task-title" style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                    {pendingTaskAction.task.title}
-                  </span>
-                  <span className="task-points-badge badge-3" style={{ fontSize: '0.62rem' }}>
-                    +{pendingTaskAction.task.points} pts
-                  </span>
-                </div>
-                <div className="audit-task-meta">
-                  <span>Day: {pendingTaskAction.task.day}</span>
-                  <span>Assignee: {pendingTaskAction.task.requestedBy || 'Personal'}</span>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', marginTop: '0.4rem' }}>
-                WEEKLY LOAD PER PERSON
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)', padding: '0.5rem', borderRadius: '4px' }}>
-                {Object.entries(pointsPerPerson).map(([name, pts]) => (
-                  <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                    <span>{name}</span>
-                    <strong style={{ fontFamily: 'var(--font-mono)' }}>{pts} pts</strong>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem', marginTop: '0.4rem' }}>
-                RUNNING WEEKLY SCHEDULE
-              </div>
-              <div className="audit-task-list">
-                {tasks
-                  .filter(t => t.week === pendingTaskAction.task.week && t.status !== 'done')
-                  .map(t => (
-                    <div key={t.id} className="audit-task-card">
-                      <div className="audit-task-header">
-                        <span className="audit-task-title">{t.title}</span>
-                        <span className={`task-points-badge badge-${t.points}`} style={{ fontSize: '0.62rem' }}>
-                          {t.points} pts
-                        </span>
-                      </div>
-                      <div className="audit-task-meta">
-                        <span>Day: {t.day}</span>
-                        <span>Assignee: {t.requestedBy || 'Personal'}</span>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-
-              <button 
-                className="btn-secondary" 
-                style={{ width: '100%', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', fontSize: '0.8rem', marginTop: '0.4rem' }} 
-                onClick={handleCancelNegotiation}
-              >
-                Abort & Drop Task
-              </button>
-            </aside>
-
-            {/* Right Side Chat */}
-            <main className="agent-chat-panel">
-              <header className="agent-chat-header">
-                <div className="agent-avatar">CA</div>
-                <div>
-                  <div className="agent-chat-title">Capacity Assistant</div>
-                  <div className="agent-chat-subtitle">Focus & Capacity Guardian</div>
-                </div>
-              </header>
-
-              <div className="chat-message-list">
-                {agentMessages.map(msg => (
-                  <div 
-                    key={msg.id} 
-                    className={`chat-bubble ${msg.sender === 'agent' ? 'agent' : 'user'} ${msg.text.startsWith('⚙️') ? 'tool-status' : ''}`}
-                    dangerouslySetInnerHTML={{ 
-                      __html: msg.text
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/\n/g, '<br />')
-                        .replace(/^- (.*?)$/gm, '• $1')
-                    }}
-                  />
-                ))}
-
-                {isAgentTyping && (
-                  <div className="chat-bubble agent" style={{ padding: '0.3rem 0.6rem' }}>
-                    <div className="typing-indicator">
-                      <div className="typing-dot" />
-                      <div className="typing-dot" />
-                      <div className="typing-dot" />
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className="chat-input-bar">
-                <input 
-                  type="text" 
-                  className="chat-input"
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendAgentMessage()}
-                  placeholder="Propose a compromise..."
-                  disabled={isAgentTyping}
-                  autoFocus
-                />
-                <button 
-                  className="chat-send-btn" 
-                  onClick={handleSendAgentMessage}
-                  disabled={isAgentTyping || !chatInput.trim()}
-                >
-                  <Send size={16} />
-                </button>
-              </div>
-            </main>
-
-          </div>
-        )}
-      </dialog>
 
       {/* Undo Toast */}
       {showUndoToast && deletedTaskBackup && (

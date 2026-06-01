@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusBoundary // AI Chat & Background Triage Mockup</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Mockup Frame Container -->
+  <div class="mockup-showcase">
+    
+    <!-- Meta explanation banner -->
+    <header class="mockup-meta">
+      <div class="meta-title">
+        <h2>/opendesign: ai-chat-experience</h2>
+        <span class="badge">Theme: Warm Editorial Journal</span>
+      </div>
+      <div class="meta-answers">
+        <div class="answer-item">
+          <strong>Purpose:</strong>
+          <span>A non-blocking inline Capacity Negotiator sidebar that lets users manage work limits collaboratively with the AI guardian while maintaining focus and keeping the main scheduling app fully functional in the background.</span>
+        </div>
+        <div class="answer-item">
+          <strong>Tone:</strong>
+          <span>Warm, tactile, and editorial journal, evoking a beautifully typeset handwritten printed diary.</span>
+        </div>
+        <div class="answer-item">
+          <strong>Differentiation:</strong>
+          <span>Turned lined paper pages, hand-sketched graphite lines, non-blocking chat bubbles resembling physical sticky notes, and clean async triage skeleton cards that animate in the background.</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace Frame -->
+    <div class="workspace-wrapper">
+      
+      <!-- Left main calendar schedule (Full Interactive Slate) -->
+      <main class="main-planner">
+        
+        <!-- Header -->
+        <header class="planner-header">
+          <div class="brand">
+            <h1><i class="fa-solid fa-brain"></i> FocusBoundary</h1>
+            <span class="sub">Focus & Capacity Coach</span>
+          </div>
+          <div class="week-indicator">
+            <span>June 1 – June 5, 2026</span>
+          </div>
+          <div class="actions">
+            <button class="btn-icon"><i class="fa-solid fa-sync"></i></button>
+            <button class="btn-icon active"><i class="fa-solid fa-cog"></i></button>
+          </div>
+        </header>
+
+        <!-- Onboarding banner -->
+        <div class="sticky-note-alert">
+          <div class="sticky-header">
+            <span>Focus Protection Sizing</span>
+            <button class="btn-close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <p>
+            FocusBoundary enforces a hard weekly capacity limit. When a task pushes you over, the save is queued in the background, and the <strong>Capacity Assistant</strong> slides open to negotiate without locking your inputs.
+          </p>
+        </div>
+
+        <!-- Quick Capture Form -->
+        <div class="quick-capture">
+          <form onsubmit="event.preventDefault();">
+            <div class="input-group">
+              <span class="icon">✏️</span>
+              <input type="text" placeholder="Add a task - AI will size and schedule in the background (e.g., 'launch feature next week')" value="add secondary login token encryption tomorrow for Sarah">
+              <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Add</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Horizons -->
+        <div class="horizons-stack">
+          
+          <!-- Focus Today -->
+          <div class="horizon-column">
+            <div class="horizon-header">
+              <span>☀️ Focus Today</span>
+              <span class="points-badge">4 / 7 pts</span>
+            </div>
+            
+            <!-- Standard Task Card -->
+            <div class="task-card">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Review sprint design specifications</span>
+                <span class="points-pill pill-1">1</span>
+              </div>
+              <div class="card-meta">
+                <span><i class="fa-solid fa-user"></i> for Sarah</span>
+              </div>
+            </div>
+
+            <!-- Standard Task Card -->
+            <div class="task-card">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Refactor storage engine schema</span>
+                <span class="points-pill pill-3">3</span>
+              </div>
+              <div class="card-meta">
+                <span><i class="fa-solid fa-user"></i> Personal</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- This Week's Backlog -->
+          <div class="horizon-column">
+            <div class="horizon-header">
+              <span>📥 This Week's Backlog</span>
+              <span class="points-badge">24 / 20 pts</span>
+            </div>
+
+            <!-- Warning Card inline -->
+            <div class="capacity-warning">
+              <div class="warning-title">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>Weekly limit exceeded! (24 / 20 pts)</span>
+              </div>
+              <button class="btn-danger-sm"><i class="fa-solid fa-brain"></i> Auto-Triage</button>
+            </div>
+
+            <!-- Standard Task Card -->
+            <div class="task-card">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Deploy main API server security patches</span>
+                <span class="points-pill pill-5">5</span>
+              </div>
+              <div class="card-meta">
+                <span><i class="fa-solid fa-user"></i> for TechLead</span>
+              </div>
+            </div>
+
+            <!-- BACKGROUND TRIAGING SKELETON CARD (NON-BLOCKING) -->
+            <div class="task-card triaging-card">
+              <div class="shimmer-effect"></div>
+              <div class="triaging-content">
+                <div class="pencil-loader">✏️</div>
+                <div class="text-block">
+                  <span class="triaging-title">add secondary login token encryption tomorrow for Sarah</span>
+                  <span class="triaging-status">Auto-sizing & organizing in background...</span>
+                </div>
+                <div class="points-pill-triaging"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+              </div>
+            </div>
+
+            <!-- Standard Task Card -->
+            <div class="task-card">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Draft focus boundary product newsletter</span>
+                <span class="points-pill pill-3">3</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Next Week -->
+          <div class="horizon-column">
+            <div class="horizon-header">
+              <span>📅 Next Week</span>
+              <span class="points-badge">5 pts</span>
+            </div>
+            
+            <div class="task-card">
+              <div class="card-header">
+                <input type="checkbox" class="task-check">
+                <span class="task-title">Perform client database cleanup</span>
+                <span class="points-pill pill-5">5</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+
+      <!-- Right Capacity assistant Sidebar Panel (Turned Lined Notebook Page) -->
+      <aside class="capacity-sidebar">
+        <div class="sidebar-page">
+          
+          <!-- Turned page fold effect -->
+          <div class="page-fold"></div>
+          
+          <!-- Left audit bar margin -->
+          <div class="audit-strip">
+            <div class="strip-header">
+              <i class="fa-solid fa-brain"></i>
+              <span>AUDIT</span>
+            </div>
+            <div class="strip-metrics">
+              <div class="metric-progress">
+                <span class="label">WEEK 22</span>
+                <span class="val">24 / 20</span>
+                <div class="bar">
+                  <div class="fill" style="width: 100%;"></div>
+                </div>
+              </div>
+              
+              <div class="transaction-card">
+                <span class="t-badge">PROPOSED</span>
+                <div class="t-title">Deploy patches</div>
+                <div class="t-points">+5 pts</div>
+              </div>
+            </div>
+            <button class="btn-abort"><i class="fa-solid fa-ban"></i> Abort</button>
+          </div>
+
+          <!-- Right conversational content panel -->
+          <div class="chat-panel">
+            <header class="chat-header">
+              <div class="avatar">CA</div>
+              <div class="meta">
+                <h3>Capacity Assistant</h3>
+                <span>Focus & Capacity Guardian</span>
+              </div>
+            </header>
+
+            <div class="message-area">
+              
+              <div class="chat-bubble agent">
+                <p>
+                  Adding <strong>"Deploy main API patches" (+5 points)</strong> pushes your weekly load to <strong>24 points</strong>, exceeding your velocity limit of <strong>20 points</strong>.
+                </p>
+              </div>
+
+              <!-- Simulating a background process completion message -->
+              <div class="chat-bubble tool-status">
+                <span>⚙️ Checked subtask breakdown for: "secondary login token"</span>
+              </div>
+
+              <div class="chat-bubble agent">
+                <p>
+                  I've processed your quick-add item <em>"add secondary login token"</em> in the background. It was sized at <strong>3 points</strong> and allocated to next week to protect your current load limit.
+                </p>
+                <p>
+                  To balance your current week, what would you like to do with <strong>"Deploy patches"</strong>?
+                </p>
+              </div>
+
+              <!-- Interactive options inside the notebook flow -->
+              <div class="compromise-choices">
+                <button class="choice-btn">
+                  <span class="number">[1]</span>
+                  <span class="text">Postpone "Draft newsletter" (3pts) to next week</span>
+                </button>
+                <button class="choice-btn">
+                  <span class="number">[2]</span>
+                  <span class="text">Resize "Deploy patches" to 2pts (XS scope)</span>
+                </button>
+                <button class="choice-btn cancel">
+                  <span class="number">[3]</span>
+                  <span class="text">Abort "Deploy patches" transaction</span>
+                </button>
+              </div>
+
+            </div>
+
+            <footer class="chat-footer">
+              <input type="text" placeholder="Respond to the coach or type here..." value="Resize to 2 points">
+              <button class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </footer>
+          </div>
+
+        </div>
+      </aside>
+
+    </div>
+
+  </div>
+
+</body>
+</html>
