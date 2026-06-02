@@ -2533,7 +2533,13 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <AlertTriangle size={14} />
-                    <span>Capacity limit exceeded!</span>
+                    <span>
+                      {getWeekPoints(currentWeek) > settings.weeklyPointsLimit && getTodayPoints() > (settings.dailyPointsLimit || 7)
+                        ? `Daily limit exceeded (${getTodayPoints()}/${settings.dailyPointsLimit || 7} pts) & Weekly limit exceeded (${getWeekPoints(currentWeek)}/${settings.weeklyPointsLimit} pts)!`
+                        : getWeekPoints(currentWeek) > settings.weeklyPointsLimit
+                        ? `Weekly load limit exceeded (${getWeekPoints(currentWeek)}/${settings.weeklyPointsLimit} pts)!`
+                        : `Daily focus limit exceeded (${getTodayPoints()}/${settings.dailyPointsLimit || 7} pts)!`}
+                    </span>
                   </div>
                   {settings.openaiApiKey && (
                     <button 
