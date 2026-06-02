@@ -246,7 +246,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   gistId: '',
   weeklyPointsLimit: 30,
   dailyPointsLimit: 7,
-  customTriagePrompt: ''
+  customTriagePrompt: '',
+  userName: ''
 };
 
 export default function App() {
@@ -395,6 +396,21 @@ export default function App() {
   const [focusElapsed, setFocusElapsed] = useState(0);
   const [isFocusPaused, setIsFocusPaused] = useState(false);
   const [activeTab, setActiveTab] = useState<'focus' | 'backlog' | 'stats' | 'settings' | 'ai'>('focus');
+  const [prevTab, setPrevTab] = useState<'focus' | 'backlog' | 'stats' | 'ai'>('focus');
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth <= 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Focus Timer active hook
   useEffect(() => {
@@ -473,6 +489,18 @@ export default function App() {
     return !hasKeys && !setupCompleted;
   });
   const [setupStep, setSetupStep] = useState<'welcome' | 'sync' | 'ai'>('welcome');
+  const [tempUserName, setTempUserName] = useState(() => {
+    const saved = localStorage.getItem('antigravity_planner_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.userName || '';
+      } catch (e) {
+        console.error('Error parsing setup userName', e);
+      }
+    }
+    return '';
+  });
   const [tempGithubPat, setTempGithubPat] = useState(() => {
     const saved = localStorage.getItem('antigravity_planner_settings');
     if (saved) {
@@ -943,12 +971,14 @@ export default function App() {
   const handleCompleteSetup = () => {
     const pat = tempGithubPat.trim();
     const apiKey = tempOpenaiApiKey.trim();
+    const name = tempUserName.trim();
 
     const nextSettings: AppSettings = {
       ...settings,
       githubPat: pat,
       gistId: tempGistId,
       openaiApiKey: apiKey,
+      userName: name,
     };
 
     setSettings(nextSettings);
@@ -968,6 +998,13 @@ export default function App() {
   };
 
   const handleSkipOnboarding = () => {
+    const name = tempUserName.trim();
+    const nextSettings: AppSettings = {
+      ...settings,
+      userName: name,
+    };
+    setSettings(nextSettings);
+    localStorage.setItem('antigravity_planner_settings', JSON.stringify(nextSettings));
     localStorage.setItem('focus_boundary_setup_completed', 'true');
     setShowSetupOnboarding(false);
     addToast('ℹ Demo Mode activated (saves locally only).');
@@ -1501,6 +1538,9 @@ export default function App() {
     e.preventDefault();
     localStorage.setItem('antigravity_planner_settings', JSON.stringify(settings));
     setIsSettingsOpen(false);
+    if (activeTab === 'settings') {
+      setActiveTab(prevTab);
+    }
   };
 
   // --- Negotiation Agent Orchestration ---
@@ -1642,6 +1682,9 @@ I have paused the save to protect your focus. Let's review your schedule. I will
           alert('Capacity Audit complete! The transaction has been saved.');
           setIsNegotiating(false);
           setPendingTaskAction(null);
+          if (activeTab === 'ai') {
+            setActiveTab(prevTab);
+          }
         }, 500);
       }
     } catch (err) {
@@ -1662,6 +1705,9 @@ I have paused the save to protect your focus. Let's review your schedule. I will
     if (savedTasks) setTasks(JSON.parse(savedTasks));
     setIsNegotiating(false);
     setPendingTaskAction(null);
+    if (activeTab === 'ai') {
+      setActiveTab(prevTab);
+    }
   };
 
   const triggerManualNegotiation = () => {
@@ -2093,7 +2139,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           <h1 className="brand-title">
             FocusBoundary
           </h1>
-          <p className="brand-subtitle-greeting">Welcome back, Alex. Your focused day starts now.</p>
+          <p className="brand-subtitle-greeting">Welcome back, {settings.userName || 'friend'}. Your focused day starts now.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem' }}>
             <span className="brand-subtitle" style={{ margin: 0, fontSize: '0.74rem' }}>
               {getWeekPoints(currentWeek)}/{settings.weeklyPointsLimit} pts
@@ -2385,7 +2431,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           )}
 
           {/* Insights & Trends Card */}
-          {isInsightsOpen && (
+          {((isMobile && activeTab === 'stats') || (!isMobile && isInsightsOpen)) && (
             <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
@@ -2495,7 +2541,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           </div>
 
           {/* Active Focus Card (Matches modern_apple_mockup) */}
-          {focusTask && (
+          {focusTask && (!isMobile || activeTab === 'focus') && (
             <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -2566,10 +2612,14 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
 
           {/* Stacked Horizons Sections */}
           <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
-            {renderTaskSectionList('Focus Today', 'today', modeFilteredTasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
-            {renderTaskSectionList("This Week's Backlog", 'week', modeFilteredTasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
-            {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
-            {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
+            {(!isMobile || activeTab === 'focus') && renderTaskSectionList('Focus Today', 'today', modeFilteredTasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
+            {(!isMobile || activeTab === 'backlog') && (
+              <>
+                {renderTaskSectionList("This Week's Backlog", 'week', modeFilteredTasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
+                {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
+                {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
+              </>
+            )}
           </main>
         </div>
 
@@ -2809,7 +2859,15 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       </dialog>
 
       {/* Settings Dialog */}
-      <dialog ref={settingsDialogRef} onClose={() => setIsSettingsOpen(false)}>
+      <dialog 
+        ref={settingsDialogRef} 
+        onClose={() => {
+          setIsSettingsOpen(false);
+          if (activeTab === 'settings') {
+            setActiveTab(prevTab);
+          }
+        }}
+      >
         <div className="modal-content glass-elevated">
           <div className="modal-header">
             <h2 className="modal-title">Settings</h2>
@@ -2819,6 +2877,18 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           </div>
 
           <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="form-group">
+              <label htmlFor="settings-username" style={{ fontWeight: 600 }}>Your Name</label>
+              <input 
+                id="settings-username"
+                type="text" 
+                className="form-control" 
+                value={settings.userName || ''}
+                onChange={e => setSettings({ ...settings, userName: e.target.value })}
+                placeholder="Enter your name"
+              />
+            </div>
+
             <div className="form-group">
               <label htmlFor="settings-openai-key" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
                 <Key size={14} /> OpenAI API Key
@@ -2996,6 +3066,21 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   <Shield size={22} className="icon-blue" style={{ flexShrink: 0 }} /> Protect Your Focus Boundary
                 </h2>
                 <p className="setup-subtitle">FocusBoundary is a calm, personal daily capacity planner designed to prevent burnout.</p>
+
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label htmlFor="onboarding-username" style={{ fontWeight: 600, display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
+                    What is your name?
+                  </label>
+                  <input
+                    id="onboarding-username"
+                    type="text"
+                    className="form-control"
+                    placeholder="Enter your name (e.g., Alex)"
+                    value={tempUserName}
+                    onChange={e => setTempUserName(e.target.value)}
+                    style={{ width: '100%', minHeight: '44px' }}
+                  />
+                </div>
 
                 <div className="onboarding-guide-box">
                   <h3 className="guide-box-title">Core Principles</h3>
@@ -3251,6 +3336,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           className={`tab-item ${activeTab === 'focus' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('focus');
+            setPrevTab('focus');
             const el = document.getElementById('section-today');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
@@ -3263,6 +3349,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           className={`tab-item ${activeTab === 'backlog' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('backlog');
+            setPrevTab('backlog');
             const el = document.getElementById('section-week');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
@@ -3275,8 +3362,11 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           className={`tab-item ${activeTab === 'stats' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('stats');
-            setIsInsightsOpen(!isInsightsOpen);
-            addToast(isInsightsOpen ? 'Collapsing insights stats' : 'Opening insights stats');
+            setPrevTab('stats');
+            if (!isMobile) {
+              setIsInsightsOpen(!isInsightsOpen);
+              addToast(isInsightsOpen ? 'Collapsing insights stats' : 'Opening insights stats');
+            }
           }}
         >
           <TrendingUp size={20} />
@@ -3286,6 +3376,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           type="button"
           className={`tab-item ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => {
+            setPrevTab(activeTab === 'settings' ? prevTab : activeTab);
             setActiveTab('settings');
             setIsSettingsOpen(true);
           }}
@@ -3297,6 +3388,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           type="button"
           className={`tab-item ${activeTab === 'ai' ? 'active' : ''}`}
           onClick={() => {
+            setPrevTab(activeTab === 'settings' ? prevTab : activeTab);
             setActiveTab('ai');
             triggerManualNegotiation();
           }}

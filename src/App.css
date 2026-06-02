@@ -1255,6 +1255,37 @@ dialog::backdrop {
     min-height: 44px;
   }
 
+  /* Switcher & Segment items: 44px min touch height */
+  .segment-item {
+    min-height: 44px;
+    padding: 0.6rem 1.2rem;
+  }
+
+  /* Task card buttons: 44×44 touch area */
+  .task-card-icon-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Quick Capture: 44px height and prevent iOS zoom-in on focus */
+  .quick-capture-form {
+    min-height: 44px;
+    padding: 0.3rem 0.5rem;
+  }
+  .quick-capture-input {
+    font-size: 16px;
+    padding: 0.5rem 0.3rem;
+  }
+  .quick-capture-submit {
+    width: 36px;
+    height: 36px;
+  }
+
   /* Week navigator label */
   .current-week-label { font-size: 0.85rem; }
 

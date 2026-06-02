@@ -43,6 +43,7 @@ export interface AppSettings {
   weeklyPointsLimit: number; // default: 30
   dailyPointsLimit: number; // default: 7
   customTriagePrompt: string; // User instructions for triage/AI Coach
+  userName?: string;
 }
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
