@@ -347,14 +347,14 @@ Parent goal: "${parentTitle}"`;
     if (!res.ok) return null;
     const data = await res.json();
     const parsed = JSON.parse(data.choices[0].message.content);
-    const rawSubtasks: any[] = parsed.subtasks || [];
+    const rawSubtasks = (parsed.subtasks || []) as Array<{ title?: string; points?: number; weekOffset?: number }>;
     const validPoints = [1, 2, 3, 5, 8];
 
     return rawSubtasks.slice(0, 5).map(s => {
       const offset = typeof s.weekOffset === 'number' ? Math.max(0, s.weekOffset) : 0;
       return {
         title: String(s.title || 'Subtask').substring(0, 60),
-        points: (validPoints.includes(s.points) ? s.points : 2) as 1 | 2 | 3 | 5 | 8,
+        points: (validPoints.includes(Number(s.points)) ? Number(s.points) : 2) as 1 | 2 | 3 | 5 | 8,
         weekOffset: offset,
         week: offset === 0 ? currentWeek : getOffsetWeekFromNow(offset),
       };

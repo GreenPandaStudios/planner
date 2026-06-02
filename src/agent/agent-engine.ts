@@ -6,7 +6,7 @@ export interface AgentMessage {
   content: string | null;
   tool_call_id?: string;
   name?: string;
-  tool_calls?: any[];
+  tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
 }
 
 export interface AgentContext {
@@ -96,7 +96,7 @@ export function buildSystemPrompt(context: AgentContext): string {
     `- **${dom}**: ${pts} points`
   ).join('\n');
 
-  let taskListMarkdown = currentWeekTasks.map(t => {
+  const taskListMarkdown = currentWeekTasks.map(t => {
     const meta = t.metadata;
     const metaStr = meta ? `[Energy: ${meta.energyLevel || '?'}, Domain: ${meta.domain || '?'}, Sentiment: ${meta.sentiment || '?'}, Urgency: ${meta.urgency || '?'}]` : '[No metadata]';
     return `- [ID: ${t.id}] "${t.title}" (${t.points} pts) - ${t.today ? 'Today' : 'Backlog'} [Assignee: ${t.requestedBy || 'Personal'}] ${metaStr}`;
@@ -262,7 +262,7 @@ export async function runAgentStep(
       ...(m.name ? { name: m.name } : {}),
       ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     })),
-  ] as any[];
+  ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
 
   try {
     const completion = await openai.chat.completions.create({
@@ -287,8 +287,9 @@ export async function runAgentStep(
 
     if (toolCalls && toolCalls.length > 0) {
       for (const call of toolCalls) {
-        const name = (call as any).function.name;
-        const args = JSON.parse((call as any).function.arguments);
+        if (call.type !== 'function') continue;
+        const name = call.function.name;
+        const args = JSON.parse(call.function.arguments);
         let result = '';
 
         try {
@@ -321,8 +322,9 @@ export async function runAgentStep(
               result = `Error: Cannot approve addition. Current points (${currentPoints}) + new task points (${context.pendingTask.points}) equals ${currentPoints + context.pendingTask.points}, which still exceeds limit ${limit}. Please reschedule or resize more tasks first.`;
             }
           }
-        } catch (e: any) {
-          result = `Error executing tool ${name}: ${e.message}`;
+        } catch (e) {
+          const error = e as Error;
+          result = `Error executing tool ${name}: ${error.message}`;
         }
 
         newMessages.push({
@@ -339,7 +341,7 @@ export async function runAgentStep(
     }
 
     return { messages: newMessages, approved };
-  } catch (err: any) {
+  } catch (err) {
     console.error('Agent execution error:', err);
     throw err;
   }

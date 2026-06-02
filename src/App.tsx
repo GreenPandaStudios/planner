@@ -45,6 +45,25 @@ import type { AgentMessage, AgentContext } from './agent/agent-engine';
 import { triageLocally, triageWithAI, silentRebalance, getTodaySuggestion, shouldBreakDown, expandToSubtasks, getOffsetWeekFromNow, autoFillToday } from './agent/triage-engine';
 import './App.css';
 
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
+
+
+// Helper functions outside component to satisfy purity rules
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 9);
+}
+
+function getTimestamp(): number {
+  return Date.now();
+}
+
 // --- Week Helper Utilities ---
 function getIsoWeek(date: Date): string {
   const tempDate = new Date(date.valueOf());
@@ -232,10 +251,63 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export default function App() {
   // --- Core States ---
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [currentWeek, setCurrentWeek] = useState<string>('');
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    let loadedTasks: Task[] = [];
+    const saved = localStorage.getItem('antigravity_planner_tasks');
+    if (saved) {
+      try {
+        loadedTasks = JSON.parse(saved);
+      } catch (e) {
+        console.error('Error loading tasks from localStorage', e);
+      }
+    }
+
+    // New day load check: runs autoFillToday autopilot silently
+    const todayStr = new Date().toDateString();
+    const lastOpened = localStorage.getItem('antigravity_planner_last_opened_date');
+    if (lastOpened !== todayStr) {
+      const savedSettings = localStorage.getItem('antigravity_planner_settings');
+      let dailyLimit = 7;
+      if (savedSettings) {
+        try {
+          const parsed = JSON.parse(savedSettings);
+          dailyLimit = parsed.dailyPointsLimit || 7;
+        } catch (e) {
+          console.error('Error parsing saved settings in lazy tasks initializer', e);
+        }
+      }
+      const currentWeekStr = getIsoWeek(new Date());
+      const updatedWithAutofill = autoFillToday(loadedTasks, currentWeekStr, dailyLimit);
+      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedWithAutofill));
+      localStorage.setItem('antigravity_planner_last_opened_date', todayStr);
+      return updatedWithAutofill;
+    }
+
+    return loadedTasks;
+  });
+  const [people, setPeople] = useState<Person[]>(() => {
+    const saved = localStorage.getItem('antigravity_planner_people');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error loading people from localStorage', e);
+      }
+    }
+    return [];
+  });
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const saved = localStorage.getItem('antigravity_planner_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_SETTINGS;
+      }
+    }
+    return DEFAULT_SETTINGS;
+  });
+  const [currentWeek] = useState<string>(() => getIsoWeek(new Date()));
   
   // --- UI States ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -253,9 +325,12 @@ export default function App() {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
+  const [isIOS] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
+  });
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
     const saved = localStorage.getItem('antigravity_planner_show_onboarding');
     return saved !== null ? JSON.parse(saved) : false;
@@ -297,7 +372,7 @@ export default function App() {
   // --- Toast system ---
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
   const addToast = useCallback((text: string) => {
-    const id = Math.random().toString(36).substring(2, 9);
+    const id = generateId();
     setToasts(prev => [...prev, { id, text }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
@@ -370,11 +445,59 @@ export default function App() {
   const [isSwipingHorizontal, setIsSwipingHorizontal] = useState<boolean>(false);
 
   // --- Setup Onboarding State ---
-  const [showSetupOnboarding, setShowSetupOnboarding] = useState(false);
+  const [showSetupOnboarding, setShowSetupOnboarding] = useState<boolean>(() => {
+    const setupCompleted = localStorage.getItem('focus_boundary_setup_completed') === 'true';
+    const savedSettings = localStorage.getItem('antigravity_planner_settings');
+    let hasKeys = false;
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.githubPat || parsed.openaiApiKey) {
+          hasKeys = true;
+        }
+      } catch (e) {
+        console.error('Error parsing setup settings', e);
+      }
+    }
+    return !hasKeys && !setupCompleted;
+  });
   const [setupStep, setSetupStep] = useState<'welcome' | 'sync' | 'ai'>('welcome');
-  const [tempGithubPat, setTempGithubPat] = useState('');
-  const [tempOpenaiApiKey, setTempOpenaiApiKey] = useState('');
-  const [tempGistId, setTempGistId] = useState('');
+  const [tempGithubPat, setTempGithubPat] = useState(() => {
+    const saved = localStorage.getItem('antigravity_planner_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.githubPat || '';
+      } catch (e) {
+        console.error('Error parsing setup githubPat', e);
+      }
+    }
+    return '';
+  });
+  const [tempOpenaiApiKey, setTempOpenaiApiKey] = useState(() => {
+    const saved = localStorage.getItem('antigravity_planner_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.openaiApiKey || '';
+      } catch (e) {
+        console.error('Error parsing setup openaiApiKey', e);
+      }
+    }
+    return '';
+  });
+  const [tempGistId, setTempGistId] = useState(() => {
+    const saved = localStorage.getItem('antigravity_planner_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.gistId || '';
+      } catch (e) {
+        console.error('Error parsing setup gistId', e);
+      }
+    }
+    return '';
+  });
   const [setupError, setSetupError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
@@ -385,66 +508,81 @@ export default function App() {
   const taskDialogRef = useRef<HTMLDialogElement>(null);
   const quickCaptureInputRef = useRef<HTMLInputElement>(null);
 
+  const triggerGistSyncPull = async (customSettings?: AppSettings) => {
+    const activeSettings = customSettings || settings;
+    if (!activeSettings.githubPat) return;
+    setSyncStatus('syncing');
+    try {
+      let activeGistId = activeSettings.gistId;
+      if (!activeGistId) {
+        const foundId = await findExistingGist(activeSettings.githubPat);
+        if (foundId) {
+          activeGistId = foundId;
+          const updatedSettings = { ...activeSettings, gistId: foundId };
+          setSettings(updatedSettings);
+          localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
+        } else {
+          const newId = await createPrivateGist(activeSettings.githubPat, tasks, people);
+          activeGistId = newId;
+          const updatedSettings = { ...activeSettings, gistId: newId };
+          setSettings(updatedSettings);
+          localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
+        }
+      }
+
+      if (activeGistId) {
+        const fetched = await fetchTasksFromGist(activeSettings.githubPat, activeGistId);
+        if (fetched) {
+          setTasks(fetched.tasks);
+          setPeople(fetched.people);
+          localStorage.setItem('antigravity_planner_tasks', JSON.stringify(fetched.tasks));
+          localStorage.setItem('antigravity_planner_people', JSON.stringify(fetched.people));
+        }
+        setSyncStatus('synced');
+      }
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
+  const triggerGistSyncPush = async (tasksToPush: Task[], peopleToPush: Person[], customSettings?: AppSettings) => {
+    const activeSettings = customSettings || settings;
+    if (!activeSettings.githubPat || !activeSettings.gistId) return;
+    setSyncStatus('syncing');
+    try {
+      await saveTasksToGist(activeSettings.githubPat, activeSettings.gistId, tasksToPush, peopleToPush);
+      setSyncStatus('synced');
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
+  const saveTasksState = (newTasks: Task[], shouldSyncPush = true) => {
+    setTasks(newTasks);
+    localStorage.setItem('antigravity_planner_tasks', JSON.stringify(newTasks));
+    if (shouldSyncPush && settings.githubPat && settings.gistId) {
+      triggerGistSyncPush(newTasks, people);
+    }
+  };
+
   // --- Initialization ---
   useEffect(() => {
-    const week = getIsoWeek(new Date());
-    setCurrentWeek(week);
-
-    const savedSettings = localStorage.getItem('antigravity_planner_settings');
-    const setupCompleted = localStorage.getItem('focus_boundary_setup_completed') === 'true';
-    let loadedSettings: AppSettings = DEFAULT_SETTINGS;
-    let hasKeys = false;
-    if (savedSettings) {
-      try { 
-        loadedSettings = JSON.parse(savedSettings); 
-        setSettings(loadedSettings); 
-        if (loadedSettings.githubPat || loadedSettings.openaiApiKey) {
-          hasKeys = true;
-        }
-      } catch (e) { 
-        console.error('Error loading settings', e); 
-      }
-    }
-
-    if (!hasKeys && !setupCompleted) {
-      setShowSetupOnboarding(true);
-      if (loadedSettings.githubPat) setTempGithubPat(loadedSettings.githubPat);
-      if (loadedSettings.openaiApiKey) setTempOpenaiApiKey(loadedSettings.openaiApiKey);
-    }
-
-    let loadedTasks: Task[] = [];
-    const savedTasks = localStorage.getItem('antigravity_planner_tasks');
-    if (savedTasks) {
-      try { loadedTasks = JSON.parse(savedTasks); setTasks(loadedTasks); } catch (e) { console.error('Error loading tasks', e); }
-    }
-
-    const savedPeople = localStorage.getItem('antigravity_planner_people');
-    if (savedPeople) {
-      try { setPeople(JSON.parse(savedPeople)); } catch (e) { console.error('Error loading people', e); }
-    }
-
-    // New day load check: runs autoFillToday autopilot silently
-    const todayStr = new Date().toDateString();
-    const lastOpened = localStorage.getItem('antigravity_planner_last_opened_date');
-    if (lastOpened !== todayStr) {
-      const updatedWithAutofill = autoFillToday(loadedTasks, week, loadedSettings.dailyPointsLimit || 7);
-      setTasks(updatedWithAutofill);
-      localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedWithAutofill));
-      localStorage.setItem('antigravity_planner_last_opened_date', todayStr);
-      loadedTasks = updatedWithAutofill;
-    }
-
     // Compute today suggestion silently on load
-    getTodaySuggestion(loadedTasks, week, loadedSettings.openaiApiKey)
-      .then(suggestion => setTodaySuggestion(suggestion))
-      .catch(() => {});
+    if (settings.openaiApiKey) {
+      getTodaySuggestion(tasks, currentWeek, settings.openaiApiKey)
+        .then(suggestion => setTodaySuggestion(suggestion))
+        .catch(e => console.error('Error getting today suggestion', e));
+    }
 
     // Auto-focus quick-add input on startup if setup completed
+    const setupCompleted = localStorage.getItem('focus_boundary_setup_completed') === 'true';
+    const hasKeys = !!(settings.githubPat || settings.openaiApiKey);
     if (hasKeys || setupCompleted) {
       setTimeout(() => {
         quickCaptureInputRef.current?.focus();
       }, 50);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- PWA Install Prompt & iOS Support ---
@@ -452,11 +590,7 @@ export default function App() {
     // Don't show if already installed (running in standalone)
     if (window.matchMedia('(display-mode: standalone)').matches) return;
 
-    // Detect iOS
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    setIsIOS(ios);
-
-    if (ios) {
+    if (isIOS) {
       const dismissed = localStorage.getItem('pwa_install_dismissed') === 'true';
       if (!dismissed) {
         const timer = setTimeout(() => {
@@ -466,9 +600,10 @@ export default function App() {
       }
     }
 
-    const handler = (e: any) => {
-      e.preventDefault();
-      setInstallPrompt(e);
+    const handler = (e: Event) => {
+      const installEvent = e as BeforeInstallPromptEvent;
+      installEvent.preventDefault();
+      setInstallPrompt(installEvent);
       const dismissed = localStorage.getItem('pwa_install_dismissed') === 'true';
       if (!dismissed) {
         setShowInstallBanner(true);
@@ -476,7 +611,7 @@ export default function App() {
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+  }, [isIOS]);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
@@ -527,8 +662,11 @@ export default function App() {
   // --- Sync Triggers ---
   useEffect(() => {
     if (settings.githubPat) {
-      triggerGistSyncPull();
+      setTimeout(() => {
+        triggerGistSyncPull();
+      }, 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.githubPat, settings.gistId]);
 
   // --- Online Auto-Sync ---
@@ -544,65 +682,10 @@ export default function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.githubPat, settings.gistId]);
 
-  const saveTasksState = (newTasks: Task[], shouldSyncPush = true) => {
-    setTasks(newTasks);
-    localStorage.setItem('antigravity_planner_tasks', JSON.stringify(newTasks));
-    if (shouldSyncPush && settings.githubPat && settings.gistId) {
-      triggerGistSyncPush(newTasks, people);
-    }
-  };
 
-
-  const triggerGistSyncPull = async (customSettings?: AppSettings) => {
-    const activeSettings = customSettings || settings;
-    if (!activeSettings.githubPat) return;
-    setSyncStatus('syncing');
-    try {
-      let activeGistId = activeSettings.gistId;
-      if (!activeGistId) {
-        const foundId = await findExistingGist(activeSettings.githubPat);
-        if (foundId) {
-          activeGistId = foundId;
-          const updatedSettings = { ...activeSettings, gistId: foundId };
-          setSettings(updatedSettings);
-          localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
-        } else {
-          const newId = await createPrivateGist(activeSettings.githubPat, tasks, people);
-          activeGistId = newId;
-          const updatedSettings = { ...activeSettings, gistId: newId };
-          setSettings(updatedSettings);
-          localStorage.setItem('antigravity_planner_settings', JSON.stringify(updatedSettings));
-        }
-      }
-
-      if (activeGistId) {
-        const fetched = await fetchTasksFromGist(activeSettings.githubPat, activeGistId);
-        if (fetched) {
-          setTasks(fetched.tasks);
-          setPeople(fetched.people);
-          localStorage.setItem('antigravity_planner_tasks', JSON.stringify(fetched.tasks));
-          localStorage.setItem('antigravity_planner_people', JSON.stringify(fetched.people));
-        }
-        setSyncStatus('synced');
-      }
-    } catch {
-      setSyncStatus('error');
-    }
-  };
-
-  const triggerGistSyncPush = async (tasksToPush: Task[], peopleToPush: Person[], customSettings?: AppSettings) => {
-    const activeSettings = customSettings || settings;
-    if (!activeSettings.githubPat || !activeSettings.gistId) return;
-    setSyncStatus('syncing');
-    try {
-      await saveTasksToGist(activeSettings.githubPat, activeSettings.gistId, tasksToPush, peopleToPush);
-      setSyncStatus('synced');
-    } catch {
-      setSyncStatus('error');
-    }
-  };
 
   // --- Point & Load Computations ---
   const getWeekPoints = (weekStr: string, taskList: Task[] = tasks) => {
@@ -1061,7 +1144,7 @@ export default function App() {
     // Clear input immediately so user can keep typing/working
     setQuickTaskTitle('');
 
-    const tempId = 'temp-' + Math.random().toString(36).substring(2, 9);
+    const tempId = 'temp-' + generateId();
     
     // Quick heuristic parse to have a placeholder point size and target week
     const quickHeuristic = triageLocally(raw, currentWeek);
@@ -1073,7 +1156,7 @@ export default function App() {
       week: quickHeuristic.week || currentWeek,
       today: quickHeuristic.today || false,
       status: 'todo',
-      createdAt: Date.now(),
+      createdAt: getTimestamp(),
       triaging: true, // Mark as background triaging!
       requestedBy: raw.match(/(?:for|to|with|asks?)\s+([A-Z][a-zA-Z]*)/)?.[1],
       metadata: {
@@ -1095,7 +1178,7 @@ export default function App() {
     if (assignedRequester) {
       const exists = people.some(p => p.name.toLowerCase() === assignedRequester.toLowerCase());
       if (!exists) {
-        const np: Person = { id: Math.random().toString(36).substring(2, 9), name: assignedRequester, createdAt: Date.now() };
+        const np: Person = { id: generateId(), name: assignedRequester, createdAt: getTimestamp() };
         nextPeople = [...people, np];
         setPeople(nextPeople);
         localStorage.setItem('antigravity_planner_people', JSON.stringify(nextPeople));
@@ -1115,12 +1198,12 @@ export default function App() {
         expandToSubtasks(parentTitle, finalTriage.weekOffset ?? 0, currentWeek, settings.openaiApiKey)
           .then(subtasks => {
             const newSubtasks: Task[] = subtasks.map(s => ({
-              id: Math.random().toString(36).substring(2, 9),
+              id: generateId(),
               title: s.title,
               points: s.points,
               week: s.week,
               status: 'todo' as const,
-              createdAt: Date.now(),
+              createdAt: getTimestamp(),
               requestedBy: assignedRequester,
               parentProject: parentTitle,
               metadata: { priority: 'medium', urgency: 'flexible', energyLevel: 'medium', domain: appMode, sentiment: 'neutral' },
@@ -1234,7 +1317,7 @@ export default function App() {
 
     const localMeta = hasTextChanged 
       ? parseTaskMetadataLocally(taskTitle, taskDesc) 
-      : (editingTask.metadata || parseTaskMetadataLocally(taskTitle, taskDesc));
+      : { ...(editingTask?.metadata || parseTaskMetadataLocally(taskTitle, taskDesc)) };
 
     if (!localMeta.domain) {
       localMeta.domain = appMode;
@@ -1247,14 +1330,14 @@ export default function App() {
     const finalPoints = isNowDelegated ? 1 : taskPoints;
 
     const proposedTask: Task = {
-      id: editingTask?.id || Math.random().toString(36).substring(2, 9),
+      id: editingTask?.id || generateId(),
       title: taskTitle,
       description: taskDesc,
       points: finalPoints as 1 | 2 | 3 | 5 | 8,
       week: taskWeek,
       today: taskToday,
       status: (editingTask?.status || 'todo') as 'todo' | 'in-progress' | 'done',
-      createdAt: editingTask?.createdAt || Date.now(),
+      createdAt: editingTask?.createdAt || getTimestamp(),
       requestedBy: cleanedName || undefined,
       metadata: localMeta,
       delegated: isNowDelegated || undefined,
@@ -1264,14 +1347,14 @@ export default function App() {
     let followUpTask: Task | null = null;
     if (isNowDelegated && (!wasDelegatedBefore || delegatedToBefore !== cleanedName)) {
       followUpTask = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         title: `Follow up with ${cleanedName} on: ${taskTitle}`,
         description: `Follow up on delegated task: ${taskDesc || ''}`,
         points: 1,
         week: taskWeek,
         today: taskToday,
         status: 'todo',
-        createdAt: Date.now(),
+        createdAt: getTimestamp(),
         metadata: {
           domain: localMeta?.domain || appMode || 'work',
           priority: 'medium',
@@ -1295,9 +1378,9 @@ export default function App() {
       const personExists = people.some(p => p.name.toLowerCase() === cleanedName.toLowerCase());
       if (!personExists) {
         const newPerson: Person = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           name: cleanedName,
-          createdAt: Date.now()
+          createdAt: getTimestamp()
         };
         nextPeople = [...people, newPerson];
       }
@@ -1442,10 +1525,10 @@ I have paused the save to protect your focus. Let's review your schedule. I will
     setChatInput('');
 
     const newUserMsg: AgentChatMessage = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: generateId(),
       sender: 'user',
       text: userText,
-      timestamp: Date.now(),
+      timestamp: getTimestamp(),
     };
     setAgentMessages(prev => [...prev, newUserMsg]);
 
@@ -1473,10 +1556,10 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       settings: settings,
       onPostponeTask: (taskId, targetWeek) => {
         setAgentMessages(prev => [...prev, {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           sender: 'agent',
           text: `⚙️ *Tool execution: Rescheduling task [ID: ${taskId}] to ${targetWeek}*`,
-          timestamp: Date.now()
+          timestamp: getTimestamp()
         }]);
 
         setTasks(prev => prev.map(t => {
@@ -1486,20 +1569,20 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       },
       onDeleteTask: (taskId) => {
         setAgentMessages(prev => [...prev, {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           sender: 'agent',
           text: `⚙️ *Tool execution: Deleting task [ID: ${taskId}]*`,
-          timestamp: Date.now()
+          timestamp: getTimestamp()
         }]);
         setTasks(prev => prev.filter(t => t.id !== taskId));
       },
       onUpdatePoints: (taskId, newPoints) => {
         if (taskId === 'new_task') {
           setAgentMessages(prev => [...prev, {
-            id: Math.random().toString(36).substring(2, 9),
+            id: generateId(),
             sender: 'agent',
             text: `⚙️ *Tool execution: Resizing pending task size to ${newPoints} points*`,
-            timestamp: Date.now()
+            timestamp: getTimestamp()
           }]);
           setPendingTaskAction(prev => {
             if (!prev) return null;
@@ -1507,10 +1590,10 @@ I have paused the save to protect your focus. Let's review your schedule. I will
           });
         } else {
           setAgentMessages(prev => [...prev, {
-            id: Math.random().toString(36).substring(2, 9),
+            id: generateId(),
             sender: 'agent',
             text: `⚙️ *Tool execution: Resizing task [ID: ${taskId}] to ${newPoints} points*`,
-            timestamp: Date.now()
+            timestamp: getTimestamp()
           }]);
           setTasks(prev => prev.map(t => {
             if (t.id === taskId) return { ...t, points: newPoints };
@@ -1528,10 +1611,10 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       const assistantTextMsg = response.messages[response.messages.length - 1];
       if (assistantTextMsg && assistantTextMsg.content) {
         setAgentMessages(prev => [...prev, {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           sender: 'agent',
           text: assistantTextMsg.content || '',
-          timestamp: Date.now()
+          timestamp: getTimestamp()
         }]);
       }
 
@@ -1550,12 +1633,13 @@ I have paused the save to protect your focus. Let's review your schedule. I will
           setPendingTaskAction(null);
         }, 500);
       }
-    } catch (err: any) {
+    } catch (err) {
+      const error = err as Error;
       setAgentMessages(prev => [...prev, {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         sender: 'agent',
-        text: `⚠️ **Agent Error**: ${err.message || 'An error occurred during negotiation.'}`,
-        timestamp: Date.now()
+        text: `⚠️ **Agent Error**: ${error.message || 'An error occurred during negotiation.'}`,
+        timestamp: getTimestamp()
       }]);
     } finally {
       setIsAgentTyping(false);
@@ -1581,7 +1665,7 @@ I have paused the save to protect your focus. Let's review your schedule. I will
       points: 1,
       week: currentWeek,
       status: 'todo',
-      createdAt: Date.now()
+      createdAt: getTimestamp()
     };
 
     setPendingTaskAction({
@@ -1599,7 +1683,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
         id: 'manual_welcome',
         sender: 'agent',
         text: welcomeMsg,
-        timestamp: Date.now(),
+        timestamp: getTimestamp(),
       }
     ]);
     
@@ -1648,7 +1732,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
           } else {
             alert("Failed: Selected file is not a valid planner backup.");
           }
-        } catch (err) {
+        } catch {
           alert("Error parsing backup JSON file.");
         }
       };
@@ -2608,7 +2692,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                   id="task-points-select"
                   className="form-control"
                   value={taskDelegated ? 1 : taskPoints}
-                  onChange={e => setTaskPoints(Number(e.target.value) as any)}
+                  onChange={e => setTaskPoints(Number(e.target.value) as 1 | 2 | 3 | 5 | 8)}
                   disabled={taskDelegated}
                 >
                   <option value={1}>1 pt — Quick (&lt;30m)</option>

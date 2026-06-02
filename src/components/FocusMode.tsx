@@ -25,7 +25,8 @@ export default function FocusMode({ task, onDone, onExit }: FocusModeProps) {
     const acquire = async () => {
       try {
         if ('wakeLock' in navigator) {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+          const nav = navigator as unknown as { wakeLock: { request: (type: string) => Promise<WakeLockSentinel> } };
+          wakeLockRef.current = await nav.wakeLock.request('screen');
         }
       } catch { /* silently ignore — not all browsers support it */ }
     };
