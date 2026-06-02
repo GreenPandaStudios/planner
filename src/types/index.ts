@@ -33,6 +33,7 @@ export interface Task {
   delegated?: boolean; // Has this task been delegated
   delegatedTo?: string; // Who this task was delegated to
   triaging?: boolean; // Is the task currently being triaged by AI in the background
+  carriedOver?: boolean; // Has this task been carried over from a previous day
 }
 
 export interface AppSettings {

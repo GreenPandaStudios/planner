@@ -509,6 +509,18 @@
   box-shadow: none;
 }
 
+/* Carry-over tasks styling */
+.task-card.carry-over {
+  background: #fffcf8 !important;
+  border-color: rgba(255, 149, 0, 0.15) !important;
+  border-left: 3.5px solid var(--color-warning) !important;
+}
+
+.task-card.carry-over:hover {
+  background: #fff9ed !important;
+  border-color: rgba(255, 149, 0, 0.25) !important;
+}
+
 .task-card.dragging {
   opacity: 0.3;
   border: 1.5px dashed var(--accent-primary) !important;

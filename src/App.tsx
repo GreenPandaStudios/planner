@@ -266,6 +266,17 @@ export default function App() {
     const todayStr = new Date().toDateString();
     const lastOpened = localStorage.getItem('antigravity_planner_last_opened_date');
     if (lastOpened !== todayStr) {
+      const processedTasks = loadedTasks.map(t => {
+        if (t.today) {
+          if (t.status === 'done') {
+            return { ...t, today: false };
+          } else {
+            return { ...t, carriedOver: true };
+          }
+        }
+        return t;
+      });
+
       const savedSettings = localStorage.getItem('antigravity_planner_settings');
       let dailyLimit = 7;
       if (savedSettings) {
@@ -277,7 +288,7 @@ export default function App() {
         }
       }
       const currentWeekStr = getIsoWeek(new Date());
-      const updatedWithAutofill = autoFillToday(loadedTasks, currentWeekStr, dailyLimit);
+      const updatedWithAutofill = autoFillToday(processedTasks, currentWeekStr, dailyLimit);
       localStorage.setItem('antigravity_planner_tasks', JSON.stringify(updatedWithAutofill));
       localStorage.setItem('antigravity_planner_last_opened_date', todayStr);
       return updatedWithAutofill;
@@ -422,7 +433,7 @@ export default function App() {
         return { 
           ...t, 
           status: 'done' as const,
-          completedAt: Date.now()
+          completedAt: getTimestamp()
         };
       }
       return t;
@@ -1477,7 +1488,7 @@ export default function App() {
         return { 
           ...t, 
           status: nextStatus,
-          completedAt: nextStatus === 'done' ? Date.now() : undefined
+          completedAt: nextStatus === 'done' ? getTimestamp() : undefined
         };
       }
       return t;
@@ -1504,7 +1515,7 @@ I have paused the save to protect your focus. Let's review your schedule. I will
         id: 'welcome',
         sender: 'agent',
         text: welcomeMsg,
-        timestamp: Date.now(),
+        timestamp: getTimestamp(),
       }
     ]);
     
@@ -1754,6 +1765,15 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
   const maxPts = Math.max(...dailyHistory.map(d => d.pts), 5);
 
   const modeFilteredTasks = tasks.filter(t => {
+    // Hide completed tasks from previous days in current schedule view
+    if (t.status === 'done' && t.completedAt) {
+      const completedDate = new Date(t.completedAt).toDateString();
+      const todayDate = new Date().toDateString();
+      if (completedDate !== todayDate) {
+        return false;
+      }
+    }
+
     const domain = t.metadata?.domain;
     if (!domain) return true;
     if (appMode === 'work') {
@@ -1902,7 +1922,7 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
             return (
               <div 
                 key={task.id} 
-                className={`task-card ${task.status === 'done' ? 'completed' : ''} ${isDraggingThis ? 'dragging' : ''} ${isDragOverThis ? 'drag-over' : ''}`}
+                className={`task-card ${task.status === 'done' ? 'completed' : ''} ${task.carriedOver ? 'carry-over' : ''} ${isDraggingThis ? 'dragging' : ''} ${isDragOverThis ? 'drag-over' : ''}`}
                 draggable={task.status !== 'done' && !isSwipingHorizontal}
                 onDragStart={(e) => handleDragStart(e, task.id)}
                 onDragEnd={handleDragEnd}
@@ -1965,10 +1985,20 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
                     {swipeOffset < 0 ? 'Move to Work' : 'Move to Personal'}
                   </div>
                 )}
-                {task.parentProject && (
-                  <div className="task-project-badge">
-                    <Link2 size={11} />
-                    <span>{task.parentProject}</span>
+                {(task.parentProject || task.carriedOver) && (
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                    {task.parentProject && (
+                      <div className="task-project-badge" style={{ marginBottom: 0 }}>
+                        <Link2 size={11} />
+                        <span>{task.parentProject}</span>
+                      </div>
+                    )}
+                    {task.carriedOver && (
+                      <div className="task-project-badge" style={{ marginBottom: 0, color: 'var(--color-warning)', background: 'rgba(255, 149, 0, 0.08)', border: '1px solid rgba(255, 149, 0, 0.15)' }}>
+                        <Clock size={11} />
+                        <span>Carry-over</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="task-card-header">
