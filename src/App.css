@@ -1272,10 +1272,13 @@ dialog::backdrop {
     justify-content: center;
   }
 
-  /* Quick Capture: 44px height and prevent iOS zoom-in on focus */
+  /* Quick Capture: 44px height, prevent iOS zoom, and align with margins */
   .quick-capture-form {
     min-height: 44px;
     padding: 0.3rem 0.5rem;
+    margin-left: 0.6rem;
+    margin-right: 0.6rem;
+    margin-top: 0.8rem;
   }
   .quick-capture-input {
     font-size: 16px;
@@ -1286,17 +1289,36 @@ dialog::backdrop {
     height: 36px;
   }
 
+  /* Align segmented switcher with margin */
+  .segmented-control {
+    margin-left: 0.6rem;
+    margin-right: 0.6rem;
+    margin-bottom: 0.8rem;
+    width: calc(100% - 1.2rem) !important;
+  }
+
   /* Week navigator label */
   .current-week-label { font-size: 0.85rem; }
 
-  /* Columns: single-column stack */
+  /* Columns: single-column stack with breathing room between days */
   .columns-container {
     grid-template-columns: 1fr;
-    gap: 0.6rem;
+    gap: 1.4rem;
     padding: 0.6rem;
   }
-  .weekday-column { min-height: auto; padding: 0.8rem; }
-  .column-title { font-size: 1.05rem; }
+  .weekday-column {
+    min-height: auto;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02) !important;
+  }
+  .column-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
   .column-points-badge { font-size: 0.85rem; padding: 0.2rem 0.45rem; }
   .task-list {
     overflow: visible !important;

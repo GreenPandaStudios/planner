@@ -1567,6 +1567,10 @@ I have paused the save to protect your focus. Let's review your schedule. I will
     ]);
     
     setIsNegotiating(true);
+    if (isMobile) {
+      setPrevTab(activeTab === 'settings' ? prevTab : activeTab);
+      setActiveTab('ai');
+    }
   };
 
   const handleSendAgentMessage = async () => {
@@ -2365,266 +2369,393 @@ Currently, you have **${getWeekPoints(currentWeek)} / ${settings.weeklyPointsLim
       <div className={`main-content-layout ${isNegotiating && pendingTaskAction ? 'has-sidebar' : ''}`}>
         <div className="planner-main-panel" style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
 
-          {/* Quick Capture Input Form */}
-          <form onSubmit={handleQuickAdd} className="quick-capture-form animate-fade-in">
-            <input 
-              type="text" 
-              className="quick-capture-input" 
-              placeholder="Add a task — FocusBoundary will schedule it"
-              ref={quickCaptureInputRef}
-              autoFocus={true}
-              value={quickTaskTitle}
-              onChange={e => setQuickTaskTitle(e.target.value)}
-            />
-            <button 
-              type="submit" 
-              className="quick-capture-submit" 
-              disabled={!quickTaskTitle.trim()}
-              title="Add Task"
-            >
-              <Plus size={16} />
-            </button>
-          </form>
-
-          {/* Excess Capacity Alert Banner */}
-          {(getTodayPoints() > (settings.dailyPointsLimit || 7) || getWeekPoints(currentWeek) > settings.weeklyPointsLimit) && (
-            <div className="glass-elevated animate-fade-in" style={{
-              background: 'rgba(255, 59, 48, 0.08)',
-              border: '1px solid rgba(255, 59, 48, 0.15)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.6rem 1rem',
-              marginBottom: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-              fontSize: '0.82rem',
-              color: 'var(--color-danger)',
-              fontWeight: 600
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <AlertTriangle size={14} />
-                <span>Capacity limit exceeded!</span>
-              </div>
-              {settings.openaiApiKey && (
-                <button 
-                  type="button" 
-                  onClick={handleTriggerManualTriage}
-                  style={{
-                    border: 'none',
-                    background: 'var(--color-danger)',
-                    color: '#fff',
-                    padding: '0.3rem 0.6rem',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'opacity 0.15s ease'
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
-                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                >
-                  Auto-Triage
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Insights & Trends Card */}
-          {((isMobile && activeTab === 'stats') || (!isMobile && isInsightsOpen)) && (
-            <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
-                  <TrendingUp size={15} /> Daily Velocity & Insights
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.2rem' }}>
-                
-                {/* Stats Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', textAlign: 'center' }}>
-                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                      {getVelocityStats().streak} days
+          {isMobile && activeTab === 'ai' ? (
+            isNegotiating && pendingTaskAction ? (
+              <div className="mobile-ai-coach-page animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: 'calc(100dvh - 7.5rem)', gap: '1rem', padding: '0.8rem 1rem' }}>
+                {/* Top Audit Banner */}
+                <div className="agent-audit-header" style={{ borderRadius: 'var(--radius-md)', padding: '1rem', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+                  <div className="audit-header-top" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
+                    <div className="agent-avatar" style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--accent-purple)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem' }}>CA</div>
+                    <div style={{ flexGrow: 1 }}>
+                      <div className="agent-chat-title" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>Capacity Assistant</div>
+                      <div className="agent-chat-subtitle" style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Focus & Capacity Guardian</div>
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
+                    <button 
+                      type="button"
+                      className="btn-abort-text"
+                      onClick={handleCancelNegotiation}
+                      title="Abort & Drop proposed task"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 600 }}
+                    >
+                      <Ban size={12} style={{ marginRight: '0.2rem' }} /> Abort
+                    </button>
                   </div>
-                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                      {getVelocityStats().averageDaily}
+
+                  <div className="audit-header-stats" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    <div className="audit-stat-item" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', fontWeight: 600 }}>
+                        <span className="audit-stat-label" style={{ color: 'var(--text-secondary)' }}>Week {pendingTaskAction.task.week.replace(/^.*-W/, '')} Load</span>
+                        <span className="audit-stat-value" style={{ color: 'var(--text-primary)' }}>{getWeekPoints(pendingTaskAction.task.week)}/{settings.weeklyPointsLimit} pts</span>
+                      </div>
+                      <div className="audit-progress-bar" style={{ height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div 
+                          className="audit-progress-fill" 
+                          style={{ 
+                            height: '100%',
+                            width: `${Math.min((getWeekPoints(pendingTaskAction.task.week) / settings.weeklyPointsLimit) * 100, 100)}%`,
+                            backgroundColor: getWeekPoints(pendingTaskAction.task.week) > settings.weeklyPointsLimit ? 'var(--color-danger)' : 'var(--accent-purple)',
+                            borderRadius: '3px'
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
-                  </div>
-                  <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                      {getVelocityStats().totalPoints}
+
+                    <div className="audit-proposed-item" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
+                      <span className="audit-stat-label" style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 500 }}>Proposed Task</span>
+                      <div className="audit-proposed-details" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
+                        <span className="audit-proposed-title" style={{ fontSize: '0.88rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '0.5rem' }} title={pendingTaskAction.task.title}>
+                          {pendingTaskAction.task.title}
+                        </span>
+                        <span className="audit-proposed-points" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-primary)', background: 'rgba(0,113,227,0.08)', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>+{pendingTaskAction.task.points} pts</span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Pts</div>
                   </div>
                 </div>
 
-                {/* Daily Velocity Chart */}
-                <div style={{ marginTop: '0.5rem' }}>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>
-                    Velocity (Last 7 Days)
-                  </div>
-                  
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'flex-end', 
-                    height: '110px', 
-                    borderBottom: '2px solid var(--text-primary)', 
-                    paddingBottom: '0.3rem',
-                    gap: '0.4rem'
-                  }}>
-                    {dailyHistory.map((item, idx) => {
-                      const pct = (item.pts / maxPts) * 100;
-                      return (
-                        <div key={idx} style={{ 
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          alignItems: 'center', 
-                          flexGrow: 1, 
-                          height: '100%', 
-                          justifyContent: 'flex-end' 
-                        }}>
-                          {item.pts > 0 && (
-                            <span style={{ fontSize: '0.74rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '0.2rem' }}>
-                              {item.pts}
-                            </span>
-                          )}
-                          <div 
-                            style={{ 
-                              width: '100%', 
-                              height: `${pct}%`, 
-                              minHeight: item.pts > 0 ? '4px' : '0px',
-                              background: item.pts > 0 
-                                ? 'repeating-linear-gradient(45deg, rgba(29, 78, 216, 0.15), rgba(29, 78, 216, 0.15) 3px, #ffffff 3px, #ffffff 6px)' 
-                                : 'transparent',
-                              border: item.pts > 0 ? '1px solid var(--border-color)' : 'none',
-                              borderBottom: 'none',
-                              borderRadius: '3px 3px 0 0',
-                              transition: 'height 0.3s ease'
-                            }} 
-                            title={`${item.pts} points on ${item.date}`}
-                          />
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            {item.date}
-                          </span>
+                {/* Conversational Chat Panel */}
+                <div className="agent-chat-panel" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-surface-solid)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                  <div className="chat-message-list" style={{ flexGrow: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', minHeight: '180px' }}>
+                    {agentMessages.map(msg => (
+                      <div 
+                        key={msg.id} 
+                        className={`chat-bubble ${msg.sender === 'agent' ? 'agent' : 'user'} ${msg.text.startsWith('⚙️') ? 'tool-status' : ''}`}
+                        dangerouslySetInnerHTML={{ 
+                          __html: msg.text
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                            .replace(/\n/g, '<br />')
+                            .replace(/^- (.*?)$/gm, '• $1')
+                        }}
+                      />
+                    ))}
+
+                    {isAgentTyping && (
+                      <div className="chat-bubble agent" style={{ padding: '0.3rem 0.6rem' }}>
+                        <div className="typing-indicator">
+                          <div className="typing-dot" />
+                          <div className="typing-dot" />
+                          <div className="typing-dot" />
                         </div>
-                      );
-                    })}
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  <div className="chat-input-bar" style={{ padding: '0.6rem 0.8rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '0.5rem', background: 'var(--bg-surface-elevated)' }}>
+                    <input 
+                      type="text" 
+                      className="chat-input"
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSendAgentMessage()}
+                      placeholder="Propose a compromise..."
+                      disabled={isAgentTyping}
+                      style={{ flexGrow: 1, border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem', outline: 'none', background: 'var(--bg-surface-solid)', fontSize: '0.92rem' }}
+                      autoFocus
+                    />
+                    <button 
+                      type="button"
+                      className="chat-send-btn" 
+                      onClick={handleSendAgentMessage}
+                      disabled={isAgentTyping || !chatInput.trim()}
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--accent-primary)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                    >
+                      <Send size={14} />
+                    </button>
                   </div>
                 </div>
-
               </div>
-            </div>
-          )}
-
-          {/* Work / Personal Context Switcher */}
-          <div className="segmented-control">
-            <button
-              type="button"
-              className={`segment-item ${appMode === 'work' ? 'active' : ''}`}
-              onClick={() => handleSetAppMode('work')}
-            >
-              <Briefcase size={14} /> Work
-            </button>
-            <button
-              type="button"
-              className={`segment-item ${appMode === 'personal' ? 'active' : ''}`}
-              onClick={() => handleSetAppMode('personal')}
-            >
-              <Home size={14} /> Personal
-            </button>
-          </div>
-
-          {/* Active Focus Card (Matches modern_apple_mockup) */}
-          {focusTask && (!isMobile || activeTab === 'focus') && (
-            <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Active Focus
-                </span>
-                <button 
+            ) : (
+              <div className="mobile-ai-coach-page animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: 'calc(100dvh - 12rem)', gap: '1rem', padding: '2rem 1.5rem', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                <Brain size={48} style={{ color: 'var(--accent-purple)', marginBottom: '0.5rem' }} />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Capacity Coach</h2>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
+                  Speak with your Coach to audit commitments, rebalance story points, or find alternatives.
+                </p>
+                <button
                   type="button"
-                  onClick={() => setFocusTask(null)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 500 }}
+                  className="btn-primary"
+                  onClick={triggerManualNegotiation}
+                  style={{ marginTop: '0.8rem', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 >
-                  Exit
+                  <Sparkles size={14} /> Start Capacity Review
+                </button>
+              </div>
+            )
+          ) : (
+            <>
+              {/* Quick Capture Input Form */}
+              <form onSubmit={handleQuickAdd} className="quick-capture-form animate-fade-in">
+                <input 
+                  type="text" 
+                  className="quick-capture-input" 
+                  placeholder="Add a task — FocusBoundary will schedule it"
+                  ref={quickCaptureInputRef}
+                  autoFocus={true}
+                  value={quickTaskTitle}
+                  onChange={e => setQuickTaskTitle(e.target.value)}
+                />
+                <button 
+                  type="submit" 
+                  className="quick-capture-submit" 
+                  disabled={!quickTaskTitle.trim()}
+                  title="Add Task"
+                >
+                  <Plus size={16} />
+                </button>
+              </form>
+
+              {/* Excess Capacity Alert Banner */}
+              {(getTodayPoints() > (settings.dailyPointsLimit || 7) || getWeekPoints(currentWeek) > settings.weeklyPointsLimit) && (
+                <div className="glass-elevated animate-fade-in" style={{
+                  background: 'rgba(255, 59, 48, 0.08)',
+                  border: '1px solid rgba(255, 59, 48, 0.15)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.6rem 1rem',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  fontSize: '0.82rem',
+                  color: 'var(--color-danger)',
+                  fontWeight: 600
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <AlertTriangle size={14} />
+                    <span>Capacity limit exceeded!</span>
+                  </div>
+                  {settings.openaiApiKey && (
+                    <button 
+                      type="button" 
+                      onClick={handleTriggerManualTriage}
+                      style={{
+                        border: 'none',
+                        background: 'var(--color-danger)',
+                        color: '#fff',
+                        padding: '0.3rem 0.6rem',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'opacity 0.15s ease'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                      onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                    >
+                      Auto-Triage
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Insights & Trends Card */}
+              {((isMobile && activeTab === 'stats') || (!isMobile && isInsightsOpen)) && (
+                <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
+                      <TrendingUp size={15} /> Daily Velocity & Insights
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.2rem' }}>
+                    
+                    {/* Stats Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', textAlign: 'center' }}>
+                      <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                          {getVelocityStats().streak} days
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Streak</div>
+                      </div>
+                      <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                          {getVelocityStats().averageDaily}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Avg Pts/Day</div>
+                      </div>
+                      <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }}>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                          {getVelocityStats().totalPoints}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Pts</div>
+                      </div>
+                    </div>
+
+                    {/* Daily Velocity Chart */}
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>
+                        Velocity (Last 7 Days)
+                      </div>
+                      
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'flex-end', 
+                        height: '110px', 
+                        borderBottom: '2px solid var(--text-primary)', 
+                        paddingBottom: '0.3rem',
+                        gap: '0.4rem'
+                      }}>
+                        {dailyHistory.map((item, idx) => {
+                          const pct = (item.pts / maxPts) * 100;
+                          return (
+                            <div key={idx} style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              alignItems: 'center', 
+                              flexGrow: 1, 
+                              height: '100%', 
+                              justifyContent: 'flex-end' 
+                            }}>
+                              {item.pts > 0 && (
+                                <span style={{ fontSize: '0.74rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '0.2rem' }}>
+                                  {item.pts}
+                                </span>
+                              )}
+                              <div 
+                                style={{ 
+                                  width: '100%', 
+                                  height: `${pct}%`, 
+                                  minHeight: item.pts > 0 ? '4px' : '0px',
+                                  background: item.pts > 0 
+                                    ? 'repeating-linear-gradient(45deg, rgba(29, 78, 216, 0.15), rgba(29, 78, 216, 0.15) 3px, #ffffff 3px, #ffffff 6px)' 
+                                    : 'transparent',
+                                  border: item.pts > 0 ? '1px solid var(--border-color)' : 'none',
+                                  borderBottom: 'none',
+                                  borderRadius: '3px 3px 0 0',
+                                  transition: 'height 0.3s ease'
+                                }} 
+                                title={`${item.pts} points on ${item.date}`}
+                              />
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {item.date}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              {/* Work / Personal Context Switcher */}
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segment-item ${appMode === 'work' ? 'active' : ''}`}
+                  onClick={() => handleSetAppMode('work')}
+                >
+                  <Briefcase size={14} /> Work
+                </button>
+                <button
+                  type="button"
+                  className={`segment-item ${appMode === 'personal' ? 'active' : ''}`}
+                  onClick={() => handleSetAppMode('personal')}
+                >
+                  <Home size={14} /> Personal
                 </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '1rem', marginTop: '0.2rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Deep Work</span>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={focusTask.title}>
-                    {focusTask.title}
-                  </span>
-                </div>
-
-                {/* Progress timer circle */}
-                <div style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="60" height="60" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
-                    <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(0,0,0,0.03)" strokeWidth="2.5" />
-                    <circle 
-                      cx="30" cy="30" r="26" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" 
-                      strokeDasharray={163.36}
-                      strokeDashoffset={163.36 * (1 - (focusElapsed % 1500) / 1500)}
-                      strokeLinecap="round"
-                      style={{ transition: 'stroke-dashoffset 1s linear' }}
-                    />
-                  </svg>
-                  <span style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {formatFocusTime(focusElapsed)}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 1, gap: '0.2rem' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Mode</span>
-                  <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.1rem' }}>
+              {/* Active Focus Card (Matches modern_apple_mockup) */}
+              {focusTask && (!isMobile || activeTab === 'focus') && (
+                <div className="capacity-card glass animate-fade-in" style={{ marginBottom: '1.2rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Active Focus
+                    </span>
                     <button 
                       type="button"
-                      className="btn-secondary" 
-                      onClick={() => setIsFocusPaused(!isFocusPaused)}
-                      style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
+                      onClick={() => setFocusTask(null)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 500 }}
                     >
-                      {isFocusPaused ? 'Resume' : 'Pause'}
-                    </button>
-                    <button 
-                      type="button"
-                      className="btn-primary" 
-                      onClick={handleCompleteActiveFocus}
-                      style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
-                    >
-                      Done
+                      Exit
                     </button>
                   </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '1rem', marginTop: '0.2rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Deep Work</span>
+                      <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={focusTask.title}>
+                        {focusTask.title}
+                      </span>
+                    </div>
+
+                    {/* Progress timer circle */}
+                    <div style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="60" height="60" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+                        <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(0,0,0,0.03)" strokeWidth="2.5" />
+                        <circle 
+                          cx="30" cy="30" r="26" fill="none" stroke="var(--accent-primary)" strokeWidth="2.5" 
+                          strokeDasharray={163.36}
+                          strokeDashoffset={163.36 * (1 - (focusElapsed % 1500) / 1500)}
+                          strokeLinecap="round"
+                          style={{ transition: 'stroke-dashoffset 1s linear' }}
+                        />
+                      </svg>
+                      <span style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {formatFocusTime(focusElapsed)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 1, gap: '0.2rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Mode</span>
+                      <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.1rem' }}>
+                        <button 
+                          type="button"
+                          className="btn-secondary" 
+                          onClick={() => setIsFocusPaused(!isFocusPaused)}
+                          style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
+                        >
+                          {isFocusPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button 
+                          type="button"
+                          className="btn-primary" 
+                          onClick={handleCompleteActiveFocus}
+                          style={{ padding: '0.3rem 0.6rem', minHeight: '30px', fontSize: '0.76rem', borderRadius: 'var(--radius-sm)' }}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.1rem' }}>
+                    Focusing...
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.1rem' }}>
-                Focusing...
-              </div>
-            </div>
+              {/* Stacked Horizons Sections */}
+              <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
+                {(!isMobile || activeTab === 'focus') && renderTaskSectionList('Focus Today', 'today', modeFilteredTasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
+                {(!isMobile || activeTab === 'backlog') && (
+                  <>
+                    {renderTaskSectionList("This Week's Backlog", 'week', modeFilteredTasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
+                    {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
+                    {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
+                  </>
+                )}
+              </main>
+            </>
           )}
-
-          {/* Stacked Horizons Sections */}
-          <main className="columns-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: 0 }}>
-            {(!isMobile || activeTab === 'focus') && renderTaskSectionList('Focus Today', 'today', modeFilteredTasks.filter(t => t.week === currentWeek && t.today), settings.dailyPointsLimit || 7)}
-            {(!isMobile || activeTab === 'backlog') && (
-              <>
-                {renderTaskSectionList("This Week's Backlog", 'week', modeFilteredTasks.filter(t => t.week === currentWeek && !t.today), settings.weeklyPointsLimit)}
-                {renderTaskSectionList('Next Week', 'next-week', modeFilteredTasks.filter(t => t.week === getOffsetWeekFromNow(1)))}
-                {renderTaskSectionList('Later', 'later', modeFilteredTasks.filter(t => t.week > getOffsetWeekFromNow(1)))}
-              </>
-            )}
-          </main>
         </div>
 
         {/* Capacity Negotiator Sidebar Drawer */}
-        {isNegotiating && pendingTaskAction && (
+        {!isMobile && isNegotiating && pendingTaskAction && (
           <aside className="agent-sidebar-drawer glass-elevated">
             
             {/* Top Audit Banner */}
